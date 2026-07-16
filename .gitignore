@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+
+# CMake / Qt build outputs
+/build/
+/build-*/
+/dist/
+/out/
+CMakeUserPresets.json
+*.pro.user
+*.user
+
+# Project-local tools and Python caches
+/.tools/
+.venv/
+__pycache__/
+*.py[cod]
+
+# User-private pet data and generated visual work
+/local/pets/
+/local/imports/
+/pet-runs/
+/qa/
+/generated/
+*.potatopet.tmp
+
+# Packaging and signing products
+*.dmg
+*.pkg
+*.xcarchive
+
