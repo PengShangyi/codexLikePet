@@ -21,13 +21,22 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 qt_add_executable(Potato MACOSX_BUNDLE
     src/main.cpp
+    src/app/AppController.cpp
+    src/app/AppController.h
+    src/app/SingleInstance.cpp
+    src/app/SingleInstance.h
+    src/platform/MacApplication.h
+    src/platform/MacApplication.mm
 )
+
+target_include_directories(Potato PRIVATE src)
 
 target_link_libraries(Potato PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
     Qt6::Network
+    "-framework AppKit"
 )
 
 set_target_properties(Potato PROPERTIES
@@ -35,6 +44,7 @@ set_target_properties(Potato PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.peng.potato"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in"
 )
 
 option(POTATO_BUILD_TESTS "Build Potato's automated tests" ON)
@@ -42,4 +52,3 @@ if(POTATO_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
-
