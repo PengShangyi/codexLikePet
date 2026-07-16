@@ -27,6 +27,12 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/app/SingleInstance.h
     src/pet/PetWindow.cpp
     src/pet/PetWindow.h
+    src/pet/AnimationPlayer.cpp
+    src/pet/AnimationPlayer.h
+    src/pet/AtlasCache.cpp
+    src/pet/AtlasCache.h
+    src/pet/PetAtlas.cpp
+    src/pet/PetAtlas.h
     src/pet/WindowPlacement.cpp
     src/pet/WindowPlacement.h
     src/platform/MacApplication.h
