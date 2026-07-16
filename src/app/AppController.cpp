@@ -13,6 +13,8 @@
 #include "resources/PetLibrary.h"
 #include "resources/PetPackageImporter.h"
 #include "resources/PetStore.h"
+#include "input/MacInputActivitySource.h"
+#include "input/TypingActivityDetector.h"
 
 #include <QAction>
 #include <QApplication>
@@ -26,6 +28,8 @@
 #include <QMessageBox>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QDesktopServices>
+#include <QPushButton>
 
 namespace {
 QIcon makeTrayIcon()
@@ -63,6 +67,8 @@ AppController::AppController(QObject *parent)
     , m_behavior(new BehaviorController(this))
     , m_quoteProvider(new FixedQuoteProvider(QStringLiteral("test balabala"), this))
     , m_speechBubble(new SpeechBubble)
+    , m_inputSource(new MacInputActivitySource(this))
+    , m_typingDetector(new TypingActivityDetector(m_inputSource, 1500, this))
 {
     connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
@@ -87,6 +93,8 @@ AppController::AppController(QObject *parent)
             m_speechBubble->showMessage(quote.text, m_petWindow->geometry(), screen->availableGeometry(), 3000);
         }
     });
+    connect(m_typingDetector, &TypingActivityDetector::typingChanged, m_behavior, &BehaviorController::setTypingActive);
+    connect(m_settings, &AppSettings::typingDetectionEnabledChanged, this, &AppController::setTypingMonitoringEnabled);
 }
 
 AppController::~AppController()
@@ -130,9 +138,35 @@ bool AppController::start()
     m_petWindow->restorePosition();
     m_petWindow->show();
     refreshPetLibrary();
+    setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
 
     connect(this, &AppController::petVisibilityRequested, m_petWindow, &QWidget::setVisible);
     return true;
+}
+
+void AppController::setTypingMonitoringEnabled(bool enabled)
+{
+    if (!enabled) {
+        m_inputSource->stop();
+        m_typingDetector->reset();
+        return;
+    }
+    const InputStartResult result = m_inputSource->start();
+    if (result == InputStartResult::Started) return;
+
+    m_settings->setTypingDetectionEnabled(false);
+    m_typingDetector->reset();
+    QMessageBox box(QMessageBox::Information,
+                    m_localization->text(TextKey::InputPermissionTitle),
+                    m_localization->text(TextKey::InputPermissionBody),
+                    QMessageBox::Cancel,
+                    m_settingsWindow);
+    QPushButton *openButton = box.addButton(m_localization->text(TextKey::OpenSystemSettings),
+                                            QMessageBox::AcceptRole);
+    box.exec();
+    if (box.clickedButton() == openButton) {
+        QDesktopServices::openUrl(QUrl(QStringLiteral("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")));
+    }
 }
 
 void AppController::refreshPetLibrary()

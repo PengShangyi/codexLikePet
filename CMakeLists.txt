@@ -72,6 +72,11 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/quotes/QuoteProvider.h
     src/quotes/SpeechBubble.cpp
     src/quotes/SpeechBubble.h
+    src/input/InputActivitySource.h
+    src/input/MacInputActivitySource.h
+    src/input/MacInputActivitySource.mm
+    src/input/TypingActivityDetector.cpp
+    src/input/TypingActivityDetector.h
     src/pet/WindowPlacement.cpp
     src/pet/WindowPlacement.h
     src/platform/MacApplication.h
@@ -87,6 +92,7 @@ target_link_libraries(Potato PRIVATE
     Qt6::Network
     miniz
     "-framework AppKit"
+    "-framework ApplicationServices"
 )
 
 set_target_properties(Potato PROPERTIES

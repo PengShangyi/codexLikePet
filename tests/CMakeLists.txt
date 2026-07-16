@@ -112,3 +112,13 @@ qt_add_executable(potato_behavior_test
 target_include_directories(potato_behavior_test PRIVATE ../src)
 target_link_libraries(potato_behavior_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
 add_test(NAME potato_behavior_test COMMAND potato_behavior_test)
+
+qt_add_executable(potato_typing_activity_test
+    test_typing_activity.cpp
+    ../src/input/TypingActivityDetector.cpp
+    ../src/input/TypingActivityDetector.h
+    ../src/input/InputActivitySource.h
+)
+target_include_directories(potato_typing_activity_test PRIVATE ../src)
+target_link_libraries(potato_typing_activity_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME potato_typing_activity_test COMMAND potato_typing_activity_test)

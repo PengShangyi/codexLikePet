@@ -14,5 +14,7 @@
     <key>LSMinimumSystemVersion</key><string>12.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSInputMonitoringUsageDescription</key>
+    <string>Potato detects typing activity timing to animate your pet. It never reads or stores key contents.</string>
 </dict>
 </plist>

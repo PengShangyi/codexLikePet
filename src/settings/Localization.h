@@ -12,6 +12,7 @@ enum class TextKey {
     English, SimplifiedChinese, ResetPosition, Close, Preview, NoPetSelected,
     ImportPackage, ImportDirectory, ImportSucceeded, ImportFailed, RemoveConfirmation,
     ValidationReport,
+    InputPermissionTitle, InputPermissionBody, OpenSystemSettings,
 };
 
 class Localization final : public QObject

@@ -20,6 +20,8 @@ class PetAtlas;
 class BehaviorController;
 class QuoteProvider;
 class SpeechBubble;
+class InputActivitySource;
+class TypingActivityDetector;
 
 class AppController final : public QObject
 {
@@ -45,6 +47,7 @@ private:
     void removeSelectedPet();
     void applyBehaviorState(BehaviorState state);
     void handlePetClick();
+    void setTypingMonitoringEnabled(bool enabled);
 
     QSystemTrayIcon *m_trayIcon;
     QMenu *m_menu;
@@ -63,5 +66,7 @@ private:
     BehaviorController *m_behavior;
     QuoteProvider *m_quoteProvider;
     SpeechBubble *m_speechBubble;
+    InputActivitySource *m_inputSource;
+    TypingActivityDetector *m_typingDetector;
     bool m_petVisible = true;
 };

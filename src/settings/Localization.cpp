@@ -57,6 +57,9 @@ QString Localization::text(TextKey key) const
     case TextKey::ImportFailed: return zh ? QStringLiteral("宠物导入失败") : QStringLiteral("Pet import failed");
     case TextKey::RemoveConfirmation: return zh ? QStringLiteral("确定删除这个本地宠物吗？") : QStringLiteral("Remove this local pet?");
     case TextKey::ValidationReport: return zh ? QStringLiteral("校验报告") : QStringLiteral("Validation report");
+    case TextKey::InputPermissionTitle: return zh ? QStringLiteral("需要输入监控权限") : QStringLiteral("Input Monitoring required");
+    case TextKey::InputPermissionBody: return zh ? QStringLiteral("Potato 只统计按键活动时间，不读取或保存按键内容。请在系统设置中允许输入监控后重新开启此选项。") : QStringLiteral("Potato records activity timing only and never reads or stores key contents. Allow Input Monitoring in System Settings, then enable this option again.");
+    case TextKey::OpenSystemSettings: return zh ? QStringLiteral("打开系统设置") : QStringLiteral("Open System Settings");
     }
     return {};
 }
