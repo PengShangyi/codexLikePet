@@ -37,4 +37,5 @@ private:
     int m_frameIndex = 0;
     double m_speedFactor = 1.0;
     bool m_reducedMotion = false;
+    bool m_shouldRun = false;
 };

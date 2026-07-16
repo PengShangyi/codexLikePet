@@ -30,6 +30,7 @@ public:
     QString selectedPetId() const;
     void setPreviewAtlas(QSharedPointer<PetAtlas> atlas, bool smoothRendering);
     void setValidationReport(const QString &report, bool error);
+    void setReducedMotion(bool reduced);
 
 signals:
     void resetPositionRequested();

@@ -17,6 +17,8 @@
 #include "input/TypingActivityDetector.h"
 #include "environment/EnvironmentClock.h"
 #include "environment/EnvironmentResolver.h"
+#include "accessibility/MotionController.h"
+#include "platform/MacSystemActivitySource.h"
 
 #include <QAction>
 #include <QApplication>
@@ -73,6 +75,8 @@ AppController::AppController(QObject *parent)
     , m_typingDetector(new TypingActivityDetector(m_inputSource, 1500, this))
     , m_environmentClock(new SystemEnvironmentClock(this))
     , m_environmentResolver(new EnvironmentResolver(m_settings, m_environmentClock, this))
+    , m_systemActivity(new MacSystemActivitySource(this))
+    , m_motionController(new MotionController(m_settings, m_systemActivity, this))
 {
     connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
@@ -102,6 +106,10 @@ AppController::AppController(QObject *parent)
     connect(m_environmentResolver, &EnvironmentResolver::environmentChanged, this, [this](const VariantKey &) {
         loadCurrentVariant();
     });
+    connect(m_motionController, &MotionController::reducedMotionChanged, m_animationPlayer, &AnimationPlayer::setReducedMotion);
+    connect(m_motionController, &MotionController::reducedMotionChanged, m_settingsWindow, &SettingsWindow::setReducedMotion);
+    connect(m_systemActivity, &SystemActivitySource::willSleep, this, &AppController::handleSystemSleep);
+    connect(m_systemActivity, &SystemActivitySource::didWake, this, &AppController::handleSystemWake);
 }
 
 AppController::~AppController()
@@ -147,9 +155,31 @@ bool AppController::start()
     refreshPetLibrary();
     setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
     m_environmentResolver->start();
+    m_animationPlayer->setReducedMotion(m_motionController->reducedMotion());
+    m_settingsWindow->setReducedMotion(m_motionController->reducedMotion());
 
     connect(this, &AppController::petVisibilityRequested, m_petWindow, &QWidget::setVisible);
     return true;
+}
+
+void AppController::handleSystemSleep()
+{
+    m_sleeping = true;
+    m_animationPlayer->stop();
+    m_environmentResolver->stop();
+    m_inputSource->stop();
+    m_typingDetector->reset();
+    m_speechBubble->hide();
+}
+
+void AppController::handleSystemWake()
+{
+    m_sleeping = false;
+    m_environmentResolver->reevaluate();
+    m_environmentResolver->start();
+    loadCurrentVariant();
+    setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
+    applyBehaviorState(m_behavior->state());
 }
 
 void AppController::setTypingMonitoringEnabled(bool enabled)
@@ -328,6 +358,12 @@ void AppController::setPetVisible(bool visible)
         return;
     }
     m_petVisible = visible;
+    if (!visible) {
+        m_animationPlayer->stop();
+        m_speechBubble->hide();
+    } else if (!m_sleeping) {
+        applyBehaviorState(m_behavior->state());
+    }
     updateVisibilityAction();
     emit petVisibilityRequested(visible);
 }

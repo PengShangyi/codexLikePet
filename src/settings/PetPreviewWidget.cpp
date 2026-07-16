@@ -20,7 +20,16 @@ void PetPreviewWidget::setAtlas(QSharedPointer<PetAtlas> atlas, bool smoothRende
     m_smooth = smoothRendering;
     m_frameIndex = 0;
     update();
-    if (isVisible() && m_atlas) m_timer->start();
+    if (isVisible() && m_atlas && !m_reducedMotion) m_timer->start();
+}
+
+void PetPreviewWidget::setReducedMotion(bool reduced)
+{
+    m_reducedMotion = reduced;
+    m_frameIndex = 0;
+    if (reduced) m_timer->stop();
+    else if (isVisible() && m_atlas) m_timer->start();
+    update();
 }
 
 void PetPreviewWidget::clear()
@@ -49,7 +58,7 @@ void PetPreviewWidget::paintEvent(QPaintEvent *)
 void PetPreviewWidget::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
-    if (m_atlas) m_timer->start();
+    if (m_atlas && !m_reducedMotion) m_timer->start();
 }
 
 void PetPreviewWidget::hideEvent(QHideEvent *event)

@@ -17,7 +17,7 @@ void AnimationPlayer::setAtlas(QSharedPointer<PetAtlas> atlas)
     m_atlas = std::move(atlas);
     m_frameIndex = 0;
     presentCurrentFrame();
-    if (m_timer->isActive()) {
+    if (m_shouldRun && !m_reducedMotion) {
         scheduleNextFrame();
     }
 }
@@ -30,7 +30,7 @@ void AnimationPlayer::setState(V2AnimationState state, bool restart)
     m_state = state;
     m_frameIndex = 0;
     presentCurrentFrame();
-    if (m_timer->isActive()) {
+    if (m_shouldRun && !m_reducedMotion) {
         scheduleNextFrame();
     }
 }
@@ -38,7 +38,7 @@ void AnimationPlayer::setState(V2AnimationState state, bool restart)
 void AnimationPlayer::setSpeedFactor(double factor)
 {
     m_speedFactor = std::clamp(factor, 0.5, 2.0);
-    if (m_timer->isActive()) {
+    if (m_shouldRun && !m_reducedMotion) {
         scheduleNextFrame();
     }
 }
@@ -50,13 +50,14 @@ void AnimationPlayer::setReducedMotion(bool reduced)
     presentCurrentFrame();
     if (reduced) {
         m_timer->stop();
-    } else if (m_atlas) {
+    } else if (m_atlas && m_shouldRun) {
         scheduleNextFrame();
     }
 }
 
 void AnimationPlayer::start()
 {
+    m_shouldRun = true;
     presentCurrentFrame();
     if (!m_reducedMotion && m_atlas) {
         scheduleNextFrame();
@@ -65,6 +66,7 @@ void AnimationPlayer::start()
 
 void AnimationPlayer::stop()
 {
+    m_shouldRun = false;
     m_timer->stop();
 }
 

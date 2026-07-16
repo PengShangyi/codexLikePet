@@ -83,6 +83,11 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/environment/EnvironmentResolver.h
     src/environment/EnvironmentState.cpp
     src/environment/EnvironmentState.h
+    src/accessibility/MotionController.cpp
+    src/accessibility/MotionController.h
+    src/platform/SystemActivitySource.h
+    src/platform/MacSystemActivitySource.h
+    src/platform/MacSystemActivitySource.mm
     src/pet/WindowPlacement.cpp
     src/pet/WindowPlacement.h
     src/platform/MacApplication.h

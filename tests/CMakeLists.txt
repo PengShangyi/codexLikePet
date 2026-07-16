@@ -139,3 +139,15 @@ qt_add_executable(potato_environment_test
 target_include_directories(potato_environment_test PRIVATE ../src)
 target_link_libraries(potato_environment_test PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME potato_environment_test COMMAND potato_environment_test)
+
+qt_add_executable(potato_motion_test
+    test_motion.cpp
+    ../src/accessibility/MotionController.cpp
+    ../src/accessibility/MotionController.h
+    ../src/platform/SystemActivitySource.h
+    ../src/settings/AppSettings.cpp
+    ../src/settings/AppSettings.h
+)
+target_include_directories(potato_motion_test PRIVATE ../src)
+target_link_libraries(potato_motion_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME potato_motion_test COMMAND potato_motion_test)

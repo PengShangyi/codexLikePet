@@ -231,3 +231,8 @@ void SettingsWindow::setValidationReport(const QString &report, bool error)
     m_report->setPlainText(report);
     m_report->setStyleSheet(error ? QStringLiteral("QPlainTextEdit { color: #a02020; }") : QString());
 }
+
+void SettingsWindow::setReducedMotion(bool reduced)
+{
+    m_preview->setReducedMotion(reduced);
+}

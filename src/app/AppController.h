@@ -26,6 +26,8 @@ class InputActivitySource;
 class TypingActivityDetector;
 class EnvironmentClock;
 class EnvironmentResolver;
+class SystemActivitySource;
+class MotionController;
 
 class AppController final : public QObject
 {
@@ -53,6 +55,8 @@ private:
     void handlePetClick();
     void setTypingMonitoringEnabled(bool enabled);
     void loadCurrentVariant();
+    void handleSystemSleep();
+    void handleSystemWake();
 
     QSystemTrayIcon *m_trayIcon;
     QMenu *m_menu;
@@ -76,5 +80,8 @@ private:
     EnvironmentClock *m_environmentClock;
     EnvironmentResolver *m_environmentResolver;
     std::optional<PetPackage> m_currentPackage;
+    SystemActivitySource *m_systemActivity;
+    MotionController *m_motionController;
+    bool m_sleeping = false;
     bool m_petVisible = true;
 };

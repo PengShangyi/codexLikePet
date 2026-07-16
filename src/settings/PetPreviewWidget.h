@@ -16,6 +16,7 @@ public:
 
     void setAtlas(QSharedPointer<PetAtlas> atlas, bool smoothRendering);
     void clear();
+    void setReducedMotion(bool reduced);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -29,4 +30,5 @@ private:
     QTimer *m_timer;
     int m_frameIndex = 0;
     bool m_smooth = true;
+    bool m_reducedMotion = false;
 };
