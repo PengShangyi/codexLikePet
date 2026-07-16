@@ -7,6 +7,9 @@
 #include "settings/SettingsWindow.h"
 #include "pet/AnimationPlayer.h"
 #include "pet/AtlasCache.h"
+#include "pet/BehaviorController.h"
+#include "quotes/QuoteProvider.h"
+#include "quotes/SpeechBubble.h"
 #include "resources/PetLibrary.h"
 #include "resources/PetPackageImporter.h"
 #include "resources/PetStore.h"
@@ -21,6 +24,8 @@
 #include <QPixmap>
 #include <QSystemTrayIcon>
 #include <QMessageBox>
+#include <QGuiApplication>
+#include <QScreen>
 
 namespace {
 QIcon makeTrayIcon()
@@ -55,6 +60,9 @@ AppController::AppController(QObject *parent)
     , m_importer(new PetPackageImporter(PetStore()))
     , m_atlasCache(new AtlasCache(2))
     , m_animationPlayer(new AnimationPlayer(this))
+    , m_behavior(new BehaviorController(this))
+    , m_quoteProvider(new FixedQuoteProvider(QStringLiteral("test balabala"), this))
+    , m_speechBubble(new SpeechBubble)
 {
     connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
@@ -64,23 +72,20 @@ AppController::AppController(QObject *parent)
     connect(m_settingsWindow, &SettingsWindow::removePetRequested, this, &AppController::removeSelectedPet);
     connect(m_animationPlayer, &AnimationPlayer::frameReady, m_petWindow, &PetWindow::setFrame);
     connect(m_settings, &AppSettings::animationSpeedChanged, m_animationPlayer, &AnimationPlayer::setSpeedFactor);
-    connect(m_petWindow, &PetWindow::dragDirectionChanged, this, [this](HorizontalDragDirection direction) {
-        if (direction == HorizontalDragDirection::Left) {
-            m_animationPlayer->setState(V2AnimationState::RunningLeft, false);
-        } else if (direction == HorizontalDragDirection::Right) {
-            m_animationPlayer->setState(V2AnimationState::RunningRight, false);
+    connect(m_petWindow, &PetWindow::dragStarted, m_behavior, &BehaviorController::beginDrag);
+    connect(m_petWindow, &PetWindow::dragDirectionChanged, m_behavior, &BehaviorController::setDragDirection);
+    connect(m_petWindow, &PetWindow::dragFinished, m_behavior, &BehaviorController::endDrag);
+    connect(m_petWindow, &PetWindow::clicked, this, &AppController::handlePetClick);
+    connect(m_behavior, &BehaviorController::stateChanged, this, &AppController::applyBehaviorState);
+    connect(m_animationPlayer, &AnimationPlayer::loopCompleted, this, [this](V2AnimationState state) {
+        if (state == V2AnimationState::Waving && m_behavior->state() == BehaviorState::ClickReaction) {
+            m_behavior->finishClickReaction();
         }
     });
-    connect(m_petWindow, &PetWindow::dragFinished, this, [this](SnapEdge edge) {
-        if (!m_currentAtlas) return;
-        if (edge == SnapEdge::None) {
-            m_animationPlayer->setState(V2AnimationState::Idle);
-            m_animationPlayer->start();
-            return;
+    connect(m_quoteProvider, &QuoteProvider::quoteReady, this, [this](const QUuid &, const Quote &quote) {
+        if (QScreen *screen = QGuiApplication::primaryScreen()) {
+            m_speechBubble->showMessage(quote.text, m_petWindow->geometry(), screen->availableGeometry(), 3000);
         }
-        m_animationPlayer->stop();
-        const int lookIndex = edge == SnapEdge::Left ? 4 : edge == SnapEdge::Right ? 12 : 0;
-        m_petWindow->setFrame(m_currentAtlas->lookFrame(lookIndex));
     });
 }
 
@@ -92,6 +97,7 @@ AppController::~AppController()
     delete m_petWindow;
     delete m_importer;
     delete m_atlasCache;
+    delete m_speechBubble;
 }
 
 bool AppController::start()
@@ -146,6 +152,8 @@ void AppController::selectPet(const QString &id)
     const PetRecord *record = m_petLibrary->find(id);
     if (!record) {
         m_animationPlayer->stop();
+        m_currentAtlas.clear();
+        m_petWindow->setFrame({});
         m_settingsWindow->setPreviewAtlas({}, true);
         return;
     }
@@ -159,12 +167,55 @@ void AppController::selectPet(const QString &id)
     m_settings->setSelectedPetId(id);
     m_currentAtlas = atlas;
     m_animationPlayer->setAtlas(atlas);
-    m_animationPlayer->setState(V2AnimationState::Idle);
+    m_behavior->setSnapEdge(m_petWindow->snapEdge());
+    applyBehaviorState(m_behavior->state());
     m_animationPlayer->setSpeedFactor(m_settings->animationSpeed());
-    m_animationPlayer->start();
     m_settingsWindow->setPreviewAtlas(atlas, record->package.renderMode == RenderMode::Smooth);
     m_settingsWindow->setValidationReport({}, false);
     m_settingsWindow->setPets(m_petLibrary->pets(), id);
+}
+
+void AppController::applyBehaviorState(BehaviorState state)
+{
+    if (!m_currentAtlas) return;
+    switch (state) {
+    case BehaviorState::Idle:
+        m_animationPlayer->setState(V2AnimationState::Idle);
+        m_animationPlayer->start();
+        break;
+    case BehaviorState::Typing:
+        m_animationPlayer->setState(V2AnimationState::Running);
+        m_animationPlayer->start();
+        break;
+    case BehaviorState::ClickReaction:
+        m_animationPlayer->setState(V2AnimationState::Waving);
+        m_animationPlayer->start();
+        break;
+    case BehaviorState::DraggingLeft:
+        m_animationPlayer->setState(V2AnimationState::RunningLeft, false);
+        m_animationPlayer->start();
+        break;
+    case BehaviorState::DraggingRight:
+        m_animationPlayer->setState(V2AnimationState::RunningRight, false);
+        m_animationPlayer->start();
+        break;
+    case BehaviorState::EdgeLeft:
+    case BehaviorState::EdgeRight:
+    case BehaviorState::EdgeBottom: {
+        m_animationPlayer->stop();
+        const int lookIndex = state == BehaviorState::EdgeLeft ? 4
+            : state == BehaviorState::EdgeRight ? 12 : 0;
+        m_petWindow->setFrame(m_currentAtlas->lookFrame(lookIndex));
+        break;
+    }
+    }
+}
+
+void AppController::handlePetClick()
+{
+    m_behavior->triggerClick();
+    m_quoteProvider->requestQuote({m_settings->selectedPetId(), QStringLiteral("click"), {}},
+                                  QUuid::createUuid());
 }
 
 void AppController::importPet(bool directory)

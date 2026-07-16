@@ -48,6 +48,8 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/pet/PetWindow.h
     src/pet/AnimationPlayer.cpp
     src/pet/AnimationPlayer.h
+    src/pet/BehaviorController.cpp
+    src/pet/BehaviorController.h
     src/pet/AtlasCache.cpp
     src/pet/AtlasCache.h
     src/pet/PetAtlas.cpp
@@ -66,6 +68,10 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/resources/PetLibrary.h
     src/settings/PetPreviewWidget.cpp
     src/settings/PetPreviewWidget.h
+    src/quotes/QuoteProvider.cpp
+    src/quotes/QuoteProvider.h
+    src/quotes/SpeechBubble.cpp
+    src/quotes/SpeechBubble.h
     src/pet/WindowPlacement.cpp
     src/pet/WindowPlacement.h
     src/platform/MacApplication.h

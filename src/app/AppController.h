@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QSharedPointer>
 
+#include "pet/BehaviorController.h"
+
 class QAction;
 class QMenu;
 class QSystemTrayIcon;
@@ -15,6 +17,9 @@ class PetPackageImporter;
 class AtlasCache;
 class AnimationPlayer;
 class PetAtlas;
+class BehaviorController;
+class QuoteProvider;
+class SpeechBubble;
 
 class AppController final : public QObject
 {
@@ -38,6 +43,8 @@ private:
     void selectPet(const QString &id);
     void importPet(bool directory);
     void removeSelectedPet();
+    void applyBehaviorState(BehaviorState state);
+    void handlePetClick();
 
     QSystemTrayIcon *m_trayIcon;
     QMenu *m_menu;
@@ -53,5 +60,8 @@ private:
     AtlasCache *m_atlasCache;
     AnimationPlayer *m_animationPlayer;
     QSharedPointer<PetAtlas> m_currentAtlas;
+    BehaviorController *m_behavior;
+    QuoteProvider *m_quoteProvider;
+    SpeechBubble *m_speechBubble;
     bool m_petVisible = true;
 };

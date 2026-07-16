@@ -97,3 +97,18 @@ qt_add_executable(potato_library_test
 target_include_directories(potato_library_test PRIVATE ../src)
 target_link_libraries(potato_library_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME potato_library_test COMMAND potato_library_test)
+
+qt_add_executable(potato_behavior_test
+    test_behavior.cpp
+    ../src/pet/BehaviorController.cpp
+    ../src/pet/BehaviorController.h
+    ../src/pet/WindowPlacement.cpp
+    ../src/pet/WindowPlacement.h
+    ../src/quotes/SpeechBubble.cpp
+    ../src/quotes/SpeechBubble.h
+    ../src/quotes/QuoteProvider.cpp
+    ../src/quotes/QuoteProvider.h
+)
+target_include_directories(potato_behavior_test PRIVATE ../src)
+target_link_libraries(potato_behavior_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+add_test(NAME potato_behavior_test COMMAND potato_behavior_test)
