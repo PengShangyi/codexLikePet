@@ -88,6 +88,11 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/platform/SystemActivitySource.h
     src/platform/MacSystemActivitySource.h
     src/platform/MacSystemActivitySource.mm
+    src/login/LoginItemController.h
+    src/login/LoginItemCoordinator.cpp
+    src/login/LoginItemCoordinator.h
+    src/login/MacLoginItemController.h
+    src/login/MacLoginItemController.mm
     src/pet/WindowPlacement.cpp
     src/pet/WindowPlacement.h
     src/platform/MacApplication.h
@@ -104,6 +109,29 @@ target_link_libraries(Potato PRIVATE
     miniz
     "-framework AppKit"
     "-framework ApplicationServices"
+    "-framework ServiceManagement"
+)
+
+add_executable(PotatoLoginHelper MACOSX_BUNDLE
+    src/login/LoginHelperMain.mm
+)
+target_link_libraries(PotatoLoginHelper PRIVATE "-framework AppKit")
+set_target_properties(PotatoLoginHelper PROPERTIES
+    MACOSX_BUNDLE_BUNDLE_NAME "PotatoLoginHelper"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.peng.potato.login-helper"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LoginHelper-Info.plist.in"
+)
+
+add_dependencies(Potato PotatoLoginHelper)
+add_custom_command(TARGET Potato POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Library/LoginItems"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "$<TARGET_BUNDLE_DIR:PotatoLoginHelper>"
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Library/LoginItems/PotatoLoginHelper.app"
+    VERBATIM
 )
 
 set_target_properties(Potato PROPERTIES

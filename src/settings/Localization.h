@@ -13,6 +13,7 @@ enum class TextKey {
     ImportPackage, ImportDirectory, ImportSucceeded, ImportFailed, RemoveConfirmation,
     ValidationReport,
     InputPermissionTitle, InputPermissionBody, OpenSystemSettings,
+    LoginItemErrorTitle,
 };
 
 class Localization final : public QObject

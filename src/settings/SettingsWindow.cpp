@@ -121,6 +121,8 @@ void SettingsWindow::bindSettings()
     connect(m_topCheck, &QCheckBox::toggled, m_settings, &AppSettings::setAlwaysOnTop);
     connect(m_loginCheck, &QCheckBox::toggled, m_settings, &AppSettings::setLaunchAtLogin);
     connect(m_typingCheck, &QCheckBox::toggled, m_settings, &AppSettings::setTypingDetectionEnabled);
+    connect(m_settings, &AppSettings::launchAtLoginChanged, m_loginCheck, &QCheckBox::setChecked);
+    connect(m_settings, &AppSettings::typingDetectionEnabledChanged, m_typingCheck, &QCheckBox::setChecked);
     connect(m_motionCombo, &QComboBox::currentIndexChanged, this, [this](int value) { m_settings->setMotionPreference(static_cast<MotionPreference>(value)); });
     connect(m_hemisphereCombo, &QComboBox::currentIndexChanged, this, [this](int value) { m_settings->setHemisphere(static_cast<Hemisphere>(value)); });
     connect(m_dayStart, &QTimeEdit::timeChanged, m_settings, &AppSettings::setDayStartsAt);

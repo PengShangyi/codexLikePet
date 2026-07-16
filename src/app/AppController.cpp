@@ -19,6 +19,8 @@
 #include "environment/EnvironmentResolver.h"
 #include "accessibility/MotionController.h"
 #include "platform/MacSystemActivitySource.h"
+#include "login/LoginItemCoordinator.h"
+#include "login/MacLoginItemController.h"
 
 #include <QAction>
 #include <QApplication>
@@ -77,6 +79,8 @@ AppController::AppController(QObject *parent)
     , m_environmentResolver(new EnvironmentResolver(m_settings, m_environmentClock, this))
     , m_systemActivity(new MacSystemActivitySource(this))
     , m_motionController(new MotionController(m_settings, m_systemActivity, this))
+    , m_loginItemController(new MacLoginItemController)
+    , m_loginItemCoordinator(new LoginItemCoordinator(m_settings, m_loginItemController, this))
 {
     connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
@@ -110,6 +114,11 @@ AppController::AppController(QObject *parent)
     connect(m_motionController, &MotionController::reducedMotionChanged, m_settingsWindow, &SettingsWindow::setReducedMotion);
     connect(m_systemActivity, &SystemActivitySource::willSleep, this, &AppController::handleSystemSleep);
     connect(m_systemActivity, &SystemActivitySource::didWake, this, &AppController::handleSystemWake);
+    connect(m_loginItemCoordinator, &LoginItemCoordinator::updateFailed, this, [this](const QString &message) {
+        QMessageBox::warning(m_settingsWindow,
+                             m_localization->text(TextKey::LoginItemErrorTitle),
+                             message);
+    });
 }
 
 AppController::~AppController()
@@ -121,6 +130,7 @@ AppController::~AppController()
     delete m_importer;
     delete m_atlasCache;
     delete m_speechBubble;
+    delete m_loginItemController;
 }
 
 bool AppController::start()
@@ -157,6 +167,7 @@ bool AppController::start()
     m_environmentResolver->start();
     m_animationPlayer->setReducedMotion(m_motionController->reducedMotion());
     m_settingsWindow->setReducedMotion(m_motionController->reducedMotion());
+    m_loginItemCoordinator->initialize();
 
     connect(this, &AppController::petVisibilityRequested, m_petWindow, &QWidget::setVisible);
     return true;

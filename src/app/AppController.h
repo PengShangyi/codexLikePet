@@ -28,6 +28,8 @@ class EnvironmentClock;
 class EnvironmentResolver;
 class SystemActivitySource;
 class MotionController;
+class LoginItemController;
+class LoginItemCoordinator;
 
 class AppController final : public QObject
 {
@@ -82,6 +84,8 @@ private:
     std::optional<PetPackage> m_currentPackage;
     SystemActivitySource *m_systemActivity;
     MotionController *m_motionController;
+    LoginItemController *m_loginItemController;
+    LoginItemCoordinator *m_loginItemCoordinator;
     bool m_sleeping = false;
     bool m_petVisible = true;
 };

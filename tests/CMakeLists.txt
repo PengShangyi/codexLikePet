@@ -151,3 +151,15 @@ qt_add_executable(potato_motion_test
 target_include_directories(potato_motion_test PRIVATE ../src)
 target_link_libraries(potato_motion_test PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME potato_motion_test COMMAND potato_motion_test)
+
+qt_add_executable(potato_login_item_test
+    test_login_item.cpp
+    ../src/login/LoginItemCoordinator.cpp
+    ../src/login/LoginItemCoordinator.h
+    ../src/login/LoginItemController.h
+    ../src/settings/AppSettings.cpp
+    ../src/settings/AppSettings.h
+)
+target_include_directories(potato_login_item_test PRIVATE ../src)
+target_link_libraries(potato_login_item_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME potato_login_item_test COMMAND potato_login_item_test)
