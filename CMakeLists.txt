@@ -134,6 +134,20 @@ add_custom_command(TARGET Potato POST_BUILD
     VERBATIM
 )
 
+add_custom_command(TARGET Potato POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Skills"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/hatch-pet"
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Skills/hatch-pet"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Documentation"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/docs/PET_AUTHORING.md"
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Documentation/PET_AUTHORING.md"
+    VERBATIM
+)
+
 set_target_properties(Potato PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "Potato"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.peng.potato"

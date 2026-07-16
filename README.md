@@ -21,3 +21,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 Set `POTATO_QT_ROOT` when Qt is not installed in a standard CMake prefix.
+
+## Creating pet resources
+
+The repository and application bundle contain an unmodified copy of the
+Apache-2.0 Hatch Pet skill. See `docs/PET_AUTHORING.md` for Codex v2 creation,
+Potato variants, edge animations, validation, and local privacy rules.
