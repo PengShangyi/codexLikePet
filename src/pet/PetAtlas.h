@@ -43,6 +43,7 @@ public:
 
     QImage frame(V2AnimationState state, int frameIndex) const;
     QImage lookFrame(int clockwiseIndex) const;
+    bool validateV2Occupancy(QString *error = nullptr) const;
 
     static AnimationSpec animationSpec(V2AnimationState state);
 

@@ -95,6 +95,49 @@ QImage PetAtlas::lookFrame(int clockwiseIndex) const
     return m_image.copy(column * CellWidth, row * CellHeight, CellWidth, CellHeight);
 }
 
+bool PetAtlas::validateV2Occupancy(QString *error) const
+{
+    if (!isValid()) {
+        if (error) {
+            *error = QStringLiteral("Atlas is not loaded");
+        }
+        return false;
+    }
+
+    for (int row = 0; row < Rows; ++row) {
+        const int usedColumns = row <= 8
+            ? animationSpec(static_cast<V2AnimationState>(row)).frameCount
+            : Columns;
+        for (int column = 0; column < Columns; ++column) {
+            bool hasVisiblePixel = false;
+            const int startX = column * CellWidth;
+            const int startY = row * CellHeight;
+            for (int y = startY; y < startY + CellHeight && !hasVisiblePixel; ++y) {
+                const QRgb *line = reinterpret_cast<const QRgb *>(m_image.constScanLine(y));
+                for (int x = startX; x < startX + CellWidth; ++x) {
+                    if (qAlpha(line[x]) != 0) {
+                        hasVisiblePixel = true;
+                        break;
+                    }
+                }
+            }
+
+            const bool shouldBeUsed = column < usedColumns;
+            if (shouldBeUsed != hasVisiblePixel) {
+                if (error) {
+                    *error = shouldBeUsed
+                        ? QStringLiteral("Used cell row %1 column %2 is empty").arg(row).arg(column)
+                        : QStringLiteral("Unused cell row %1 column %2 is not transparent")
+                              .arg(row)
+                              .arg(column);
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 AnimationSpec PetAtlas::animationSpec(V2AnimationState state)
 {
     switch (state) {
