@@ -64,6 +64,24 @@ AppController::AppController(QObject *parent)
     connect(m_settingsWindow, &SettingsWindow::removePetRequested, this, &AppController::removeSelectedPet);
     connect(m_animationPlayer, &AnimationPlayer::frameReady, m_petWindow, &PetWindow::setFrame);
     connect(m_settings, &AppSettings::animationSpeedChanged, m_animationPlayer, &AnimationPlayer::setSpeedFactor);
+    connect(m_petWindow, &PetWindow::dragDirectionChanged, this, [this](HorizontalDragDirection direction) {
+        if (direction == HorizontalDragDirection::Left) {
+            m_animationPlayer->setState(V2AnimationState::RunningLeft, false);
+        } else if (direction == HorizontalDragDirection::Right) {
+            m_animationPlayer->setState(V2AnimationState::RunningRight, false);
+        }
+    });
+    connect(m_petWindow, &PetWindow::dragFinished, this, [this](SnapEdge edge) {
+        if (!m_currentAtlas) return;
+        if (edge == SnapEdge::None) {
+            m_animationPlayer->setState(V2AnimationState::Idle);
+            m_animationPlayer->start();
+            return;
+        }
+        m_animationPlayer->stop();
+        const int lookIndex = edge == SnapEdge::Left ? 4 : edge == SnapEdge::Right ? 12 : 0;
+        m_petWindow->setFrame(m_currentAtlas->lookFrame(lookIndex));
+    });
 }
 
 AppController::~AppController()
@@ -139,6 +157,7 @@ void AppController::selectPet(const QString &id)
         return;
     }
     m_settings->setSelectedPetId(id);
+    m_currentAtlas = atlas;
     m_animationPlayer->setAtlas(atlas);
     m_animationPlayer->setState(V2AnimationState::Idle);
     m_animationPlayer->setSpeedFactor(m_settings->animationSpeed());

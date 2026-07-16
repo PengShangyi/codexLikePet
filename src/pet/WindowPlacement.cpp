@@ -29,4 +29,40 @@ bool isUsableSavedPosition(const QPoint &position,
     return availableGeometry.contains(proposed.topLeft())
         && availableGeometry.contains(proposed.bottomRight());
 }
+
+SnapEdge resolveSnapEdge(const QPoint &position,
+                         const QSize &windowSize,
+                         const QRect &availableGeometry,
+                         int threshold)
+{
+    const QPoint clamped = clampToAvailableGeometry(position, windowSize, availableGeometry);
+    const int bottomY = availableGeometry.bottom() - windowSize.height() + 1;
+    const int rightX = availableGeometry.right() - windowSize.width() + 1;
+    if (bottomY - clamped.y() <= threshold) return SnapEdge::Bottom;
+    if (clamped.x() - availableGeometry.left() <= threshold) return SnapEdge::Left;
+    if (rightX - clamped.x() <= threshold) return SnapEdge::Right;
+    return SnapEdge::None;
+}
+
+QPoint snappedPosition(SnapEdge edge,
+                       const QPoint &position,
+                       const QSize &windowSize,
+                       const QRect &availableGeometry)
+{
+    QPoint result = clampToAvailableGeometry(position, windowSize, availableGeometry);
+    switch (edge) {
+    case SnapEdge::Left: result.setX(availableGeometry.left()); break;
+    case SnapEdge::Right: result.setX(availableGeometry.right() - windowSize.width() + 1); break;
+    case SnapEdge::Bottom: result.setY(availableGeometry.bottom() - windowSize.height() + 1); break;
+    case SnapEdge::None: break;
+    }
+    return result;
+}
+
+HorizontalDragDirection horizontalDirectionForDelta(int deltaX, int minimumDelta)
+{
+    if (deltaX >= minimumDelta) return HorizontalDragDirection::Right;
+    if (deltaX <= -minimumDelta) return HorizontalDragDirection::Left;
+    return HorizontalDragDirection::None;
+}
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QSharedPointer>
 
 class QAction;
 class QMenu;
@@ -13,6 +14,7 @@ class PetLibrary;
 class PetPackageImporter;
 class AtlasCache;
 class AnimationPlayer;
+class PetAtlas;
 
 class AppController final : public QObject
 {
@@ -50,5 +52,6 @@ private:
     PetPackageImporter *m_importer;
     AtlasCache *m_atlasCache;
     AnimationPlayer *m_animationPlayer;
+    QSharedPointer<PetAtlas> m_currentAtlas;
     bool m_petVisible = true;
 };

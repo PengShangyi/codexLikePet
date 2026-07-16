@@ -5,6 +5,7 @@
 
 #include <QGuiApplication>
 #include <QMoveEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QScreen>
 #include <QSettings>
@@ -21,6 +22,7 @@ PetWindow::PetWindow(AppSettings *settings, QWidget *parent)
     setAttribute(Qt::WA_NoSystemBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
     setAutoFillBackground(false);
+    setCursor(Qt::OpenHandCursor);
 
     m_scaleFactor = settings->scale();
     m_alwaysOnTop = settings->alwaysOnTop();
@@ -49,6 +51,11 @@ double PetWindow::scaleFactor() const
 bool PetWindow::isAlwaysOnTop() const
 {
     return m_alwaysOnTop;
+}
+
+SnapEdge PetWindow::snapEdge() const
+{
+    return m_snapEdge;
 }
 
 void PetWindow::setFrame(const QImage &frame)
@@ -84,6 +91,7 @@ void PetWindow::setAlwaysOnTop(bool enabled)
 void PetWindow::resetPosition()
 {
     QSettings().remove(QStringLiteral("window/position"));
+    m_snapEdge = SnapEdge::None;
     restorePosition();
 }
 
@@ -100,6 +108,7 @@ void PetWindow::restorePosition()
     m_restoringPosition = true;
     move(position);
     m_restoringPosition = false;
+    m_snapEdge = WindowPlacement::resolveSnapEdge(position, size(), available, 0);
 }
 
 void PetWindow::clampToPrimaryScreen()
@@ -142,6 +151,65 @@ void PetWindow::moveEvent(QMoveEvent *event)
     if (!m_restoringPosition) {
         QSettings().setValue(QStringLiteral("window/position"), event->pos());
     }
+}
+
+void PetWindow::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+    m_pointerDown = true;
+    m_dragging = false;
+    m_pressGlobal = event->globalPosition().toPoint();
+    m_lastGlobal = m_pressGlobal;
+    m_pressWindow = pos();
+    event->accept();
+}
+
+void PetWindow::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!m_pointerDown || !(event->buttons() & Qt::LeftButton)) {
+        QWidget::mouseMoveEvent(event);
+        return;
+    }
+    const QPoint global = event->globalPosition().toPoint();
+    const QPoint totalDelta = global - m_pressGlobal;
+    if (!m_dragging && totalDelta.manhattanLength() >= 4) {
+        m_dragging = true;
+        m_snapEdge = SnapEdge::None;
+        setCursor(Qt::ClosedHandCursor);
+        emit dragStarted();
+    }
+    if (m_dragging) {
+        const HorizontalDragDirection direction = WindowPlacement::horizontalDirectionForDelta(global.x() - m_lastGlobal.x());
+        if (direction != HorizontalDragDirection::None) emit dragDirectionChanged(direction);
+        move(WindowPlacement::clampToAvailableGeometry(m_pressWindow + totalDelta,
+                                                        size(),
+                                                        primaryAvailableGeometry()));
+    }
+    m_lastGlobal = global;
+    event->accept();
+}
+
+void PetWindow::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton || !m_pointerDown) {
+        QWidget::mouseReleaseEvent(event);
+        return;
+    }
+    m_pointerDown = false;
+    setCursor(Qt::OpenHandCursor);
+    if (m_dragging) {
+        const QRect available = primaryAvailableGeometry();
+        m_snapEdge = WindowPlacement::resolveSnapEdge(pos(), size(), available, 24);
+        move(WindowPlacement::snappedPosition(m_snapEdge, pos(), size(), available));
+        m_dragging = false;
+        emit dragFinished(m_snapEdge);
+    } else {
+        emit clicked();
+    }
+    event->accept();
 }
 
 QRect PetWindow::primaryAvailableGeometry() const
