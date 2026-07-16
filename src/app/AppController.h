@@ -5,6 +5,7 @@
 class QAction;
 class QMenu;
 class QSystemTrayIcon;
+class PetWindow;
 
 class AppController final : public QObject
 {
@@ -28,5 +29,6 @@ private:
     QSystemTrayIcon *m_trayIcon;
     QMenu *m_menu;
     QAction *m_visibilityAction;
+    PetWindow *m_petWindow;
     bool m_petVisible = true;
 };

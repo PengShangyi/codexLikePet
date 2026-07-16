@@ -1,6 +1,7 @@
 #include "app/AppController.h"
 
 #include "platform/MacApplication.h"
+#include "pet/PetWindow.h"
 
 #include <QAction>
 #include <QApplication>
@@ -33,6 +34,7 @@ AppController::AppController(QObject *parent)
     , m_trayIcon(new QSystemTrayIcon(this))
     , m_menu(new QMenu)
     , m_visibilityAction(nullptr)
+    , m_petWindow(new PetWindow)
 {
 }
 
@@ -40,6 +42,7 @@ AppController::~AppController()
 {
     m_trayIcon->setContextMenu(nullptr);
     delete m_menu;
+    delete m_petWindow;
 }
 
 bool AppController::start()
@@ -68,6 +71,10 @@ bool AppController::start()
     m_trayIcon->setToolTip(QStringLiteral("Potato"));
     m_trayIcon->setContextMenu(m_menu);
     m_trayIcon->show();
+    m_petWindow->restorePosition();
+    m_petWindow->show();
+
+    connect(this, &AppController::petVisibilityRequested, m_petWindow, &QWidget::setVisible);
     return true;
 }
 
