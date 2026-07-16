@@ -80,3 +80,20 @@ qt_add_executable(potato_settings_test
 target_include_directories(potato_settings_test PRIVATE ../src)
 target_link_libraries(potato_settings_test PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME potato_settings_test COMMAND potato_settings_test)
+
+qt_add_executable(potato_library_test
+    test_library.cpp
+    ../src/pet/PetAtlas.cpp
+    ../src/pet/PetAtlas.h
+    ../src/resources/PetPackage.cpp
+    ../src/resources/PetPackage.h
+    ../src/resources/PetPackageValidator.cpp
+    ../src/resources/PetPackageValidator.h
+    ../src/resources/PetStore.cpp
+    ../src/resources/PetStore.h
+    ../src/resources/PetLibrary.cpp
+    ../src/resources/PetLibrary.h
+)
+target_include_directories(potato_library_test PRIVATE ../src)
+target_link_libraries(potato_library_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME potato_library_test COMMAND potato_library_test)

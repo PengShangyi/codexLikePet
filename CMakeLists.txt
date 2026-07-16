@@ -62,6 +62,10 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/resources/PetPackageImporter.h
     src/resources/PetStore.cpp
     src/resources/PetStore.h
+    src/resources/PetLibrary.cpp
+    src/resources/PetLibrary.h
+    src/settings/PetPreviewWidget.cpp
+    src/settings/PetPreviewWidget.h
     src/pet/WindowPlacement.cpp
     src/pet/WindowPlacement.h
     src/platform/MacApplication.h

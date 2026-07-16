@@ -51,6 +51,12 @@ QString Localization::text(TextKey key) const
     case TextKey::Close: return zh ? QStringLiteral("关闭") : QStringLiteral("Close");
     case TextKey::Preview: return zh ? QStringLiteral("预览") : QStringLiteral("Preview");
     case TextKey::NoPetSelected: return zh ? QStringLiteral("暂无可用宠物") : QStringLiteral("No pet available");
+    case TextKey::ImportPackage: return zh ? QStringLiteral("导入 .potatopet…") : QStringLiteral("Import .potatopet…");
+    case TextKey::ImportDirectory: return zh ? QStringLiteral("导入资源目录…") : QStringLiteral("Import resource directory…");
+    case TextKey::ImportSucceeded: return zh ? QStringLiteral("宠物导入成功") : QStringLiteral("Pet imported successfully");
+    case TextKey::ImportFailed: return zh ? QStringLiteral("宠物导入失败") : QStringLiteral("Pet import failed");
+    case TextKey::RemoveConfirmation: return zh ? QStringLiteral("确定删除这个本地宠物吗？") : QStringLiteral("Remove this local pet?");
+    case TextKey::ValidationReport: return zh ? QStringLiteral("校验报告") : QStringLiteral("Validation report");
     }
     return {};
 }

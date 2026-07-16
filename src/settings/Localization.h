@@ -10,6 +10,8 @@ enum class TextKey {
     TypingPrivacyNote, ReducedMotion, FollowSystem, ReduceMotion, FullMotion,
     Hemisphere, North, South, DayStarts, NightStarts, Language, SystemLanguage,
     English, SimplifiedChinese, ResetPosition, Close, Preview, NoPetSelected,
+    ImportPackage, ImportDirectory, ImportSucceeded, ImportFailed, RemoveConfirmation,
+    ValidationReport,
 };
 
 class Localization final : public QObject

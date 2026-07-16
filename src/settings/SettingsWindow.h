@@ -1,6 +1,9 @@
 #pragma once
 
 #include <QWidget>
+#include <QSharedPointer>
+
+#include "pet/PetAtlas.h"
 
 class AppSettings;
 class Localization;
@@ -12,6 +15,9 @@ class QPushButton;
 class QSlider;
 class QTabWidget;
 class QTimeEdit;
+class QPlainTextEdit;
+class PetPreviewWidget;
+struct PetRecord;
 
 class SettingsWindow final : public QWidget
 {
@@ -20,10 +26,17 @@ class SettingsWindow final : public QWidget
 public:
     SettingsWindow(AppSettings *settings, Localization *localization, QWidget *parent = nullptr);
 
+    void setPets(const QVector<PetRecord> &pets, const QString &selectedId);
+    QString selectedPetId() const;
+    void setPreviewAtlas(QSharedPointer<PetAtlas> atlas, bool smoothRendering);
+    void setValidationReport(const QString &report, bool error);
+
 signals:
     void resetPositionRequested();
-    void importPetRequested();
+    void importPackageRequested();
+    void importDirectoryRequested();
     void removePetRequested();
+    void petSelected(const QString &id);
 
 private:
     void buildUi();
@@ -39,7 +52,8 @@ private:
     QComboBox *m_petCombo;
     QPushButton *m_importButton;
     QPushButton *m_removeButton;
-    QLabel *m_previewLabel;
+    PetPreviewWidget *m_preview;
+    QPlainTextEdit *m_report;
     QSlider *m_scaleSlider;
     QSlider *m_speedSlider;
     QCheckBox *m_topCheck;
