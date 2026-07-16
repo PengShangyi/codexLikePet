@@ -69,3 +69,14 @@ qt_add_executable(potato_package_importer_test
 target_include_directories(potato_package_importer_test PRIVATE ../src)
 target_link_libraries(potato_package_importer_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test miniz)
 add_test(NAME potato_package_importer_test COMMAND potato_package_importer_test)
+
+qt_add_executable(potato_settings_test
+    test_settings.cpp
+    ../src/settings/AppSettings.cpp
+    ../src/settings/AppSettings.h
+    ../src/settings/Localization.cpp
+    ../src/settings/Localization.h
+)
+target_include_directories(potato_settings_test PRIVATE ../src)
+target_link_libraries(potato_settings_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME potato_settings_test COMMAND potato_settings_test)

@@ -2,6 +2,9 @@
 
 #include "platform/MacApplication.h"
 #include "pet/PetWindow.h"
+#include "settings/AppSettings.h"
+#include "settings/Localization.h"
+#include "settings/SettingsWindow.h"
 
 #include <QAction>
 #include <QApplication>
@@ -34,14 +37,22 @@ AppController::AppController(QObject *parent)
     , m_trayIcon(new QSystemTrayIcon(this))
     , m_menu(new QMenu)
     , m_visibilityAction(nullptr)
-    , m_petWindow(new PetWindow)
+    , m_settingsAction(nullptr)
+    , m_quitAction(nullptr)
+    , m_settings(new AppSettings(this))
+    , m_localization(new Localization(m_settings, this))
+    , m_settingsWindow(new SettingsWindow(m_settings, m_localization))
+    , m_petWindow(new PetWindow(m_settings))
 {
+    connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
+    connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
 }
 
 AppController::~AppController()
 {
     m_trayIcon->setContextMenu(nullptr);
     delete m_menu;
+    delete m_settingsWindow;
     delete m_petWindow;
 }
 
@@ -60,12 +71,13 @@ bool AppController::start()
     });
     updateVisibilityAction();
 
-    QAction *settingsAction = m_menu->addAction(tr("Settings…"));
-    connect(settingsAction, &QAction::triggered, this, &AppController::requestSettings);
+    m_settingsAction = m_menu->addAction(QString());
+    connect(m_settingsAction, &QAction::triggered, this, &AppController::requestSettings);
 
     m_menu->addSeparator();
-    QAction *quitAction = m_menu->addAction(tr("Quit Potato"));
-    connect(quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
+    m_quitAction = m_menu->addAction(QString());
+    connect(m_quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
+    updateVisibilityAction();
 
     m_trayIcon->setIcon(makeTrayIcon());
     m_trayIcon->setToolTip(QStringLiteral("Potato"));
@@ -81,6 +93,9 @@ bool AppController::start()
 void AppController::requestSettings()
 {
     MacApplication::activateIgnoringOtherApps();
+    m_settingsWindow->show();
+    m_settingsWindow->raise();
+    m_settingsWindow->activateWindow();
     emit settingsRequested();
 }
 
@@ -97,6 +112,9 @@ void AppController::setPetVisible(bool visible)
 void AppController::updateVisibilityAction()
 {
     if (m_visibilityAction) {
-        m_visibilityAction->setText(m_petVisible ? tr("Hide Pet") : tr("Show Pet"));
+        m_visibilityAction->setText(m_petVisible ? m_localization->text(TextKey::HidePet)
+                                                  : m_localization->text(TextKey::ShowPet));
     }
+    if (m_settingsAction) m_settingsAction->setText(m_localization->text(TextKey::Settings));
+    if (m_quitAction) m_quitAction->setText(m_localization->text(TextKey::Quit));
 }

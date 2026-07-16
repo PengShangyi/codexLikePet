@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QScreen;
+class AppSettings;
 
 class PetWindow final : public QWidget
 {
@@ -13,7 +14,7 @@ public:
     static constexpr int CellWidth = 192;
     static constexpr int CellHeight = 208;
 
-    explicit PetWindow(QWidget *parent = nullptr);
+    explicit PetWindow(AppSettings *settings, QWidget *parent = nullptr);
 
     double scaleFactor() const;
     bool isAlwaysOnTop() const;
@@ -23,6 +24,7 @@ public slots:
     void setScaleFactor(double factor);
     void setAlwaysOnTop(bool enabled);
     void restorePosition();
+    void resetPosition();
     void clampToPrimaryScreen();
 
 protected:
@@ -37,4 +39,5 @@ private:
     double m_scaleFactor = 1.0;
     bool m_alwaysOnTop = true;
     bool m_restoringPosition = false;
+    AppSettings *m_settings;
 };

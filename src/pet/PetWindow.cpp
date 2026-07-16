@@ -1,6 +1,7 @@
 #include "pet/PetWindow.h"
 
 #include "pet/WindowPlacement.h"
+#include "settings/AppSettings.h"
 
 #include <QGuiApplication>
 #include <QMoveEvent>
@@ -10,25 +11,25 @@
 
 #include <algorithm>
 
-PetWindow::PetWindow(QWidget *parent)
+PetWindow::PetWindow(AppSettings *settings, QWidget *parent)
     : QWidget(parent,
               Qt::Tool | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus
                   | Qt::WindowStaysOnTopHint)
 {
+    m_settings = settings;
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
     setAutoFillBackground(false);
 
-    QSettings settings;
-    m_scaleFactor = std::clamp(settings.value(QStringLiteral("appearance/scale"), 1.0).toDouble(),
-                               0.5,
-                               2.0);
-    m_alwaysOnTop = settings.value(QStringLiteral("appearance/alwaysOnTop"), true).toBool();
+    m_scaleFactor = settings->scale();
+    m_alwaysOnTop = settings->alwaysOnTop();
     if (!m_alwaysOnTop) {
         setWindowFlag(Qt::WindowStaysOnTopHint, false);
     }
     updateWindowSize();
+    connect(settings, &AppSettings::scaleChanged, this, &PetWindow::setScaleFactor);
+    connect(settings, &AppSettings::alwaysOnTopChanged, this, &PetWindow::setAlwaysOnTop);
 
     connect(qApp, &QGuiApplication::primaryScreenChanged, this, [this](QScreen *) {
         clampToPrimaryScreen();
@@ -63,7 +64,6 @@ void PetWindow::setScaleFactor(double factor)
         return;
     }
     m_scaleFactor = factor;
-    QSettings().setValue(QStringLiteral("appearance/scale"), factor);
     updateWindowSize();
     clampToPrimaryScreen();
 }
@@ -76,10 +76,15 @@ void PetWindow::setAlwaysOnTop(bool enabled)
     const bool wasVisible = isVisible();
     m_alwaysOnTop = enabled;
     setWindowFlag(Qt::WindowStaysOnTopHint, enabled);
-    QSettings().setValue(QStringLiteral("appearance/alwaysOnTop"), enabled);
     if (wasVisible) {
         show();
     }
+}
+
+void PetWindow::resetPosition()
+{
+    QSettings().remove(QStringLiteral("window/position"));
+    restorePosition();
 }
 
 void PetWindow::restorePosition()
