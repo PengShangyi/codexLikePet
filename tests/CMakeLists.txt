@@ -122,3 +122,20 @@ qt_add_executable(potato_typing_activity_test
 target_include_directories(potato_typing_activity_test PRIVATE ../src)
 target_link_libraries(potato_typing_activity_test PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME potato_typing_activity_test COMMAND potato_typing_activity_test)
+
+qt_add_executable(potato_environment_test
+    test_environment.cpp
+    ../src/environment/EnvironmentClock.cpp
+    ../src/environment/EnvironmentClock.h
+    ../src/environment/EnvironmentResolver.cpp
+    ../src/environment/EnvironmentResolver.h
+    ../src/environment/EnvironmentState.cpp
+    ../src/environment/EnvironmentState.h
+    ../src/settings/AppSettings.cpp
+    ../src/settings/AppSettings.h
+    ../src/resources/PetPackage.cpp
+    ../src/resources/PetPackage.h
+)
+target_include_directories(potato_environment_test PRIVATE ../src)
+target_link_libraries(potato_environment_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME potato_environment_test COMMAND potato_environment_test)

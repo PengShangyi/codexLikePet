@@ -15,6 +15,8 @@
 #include "resources/PetStore.h"
 #include "input/MacInputActivitySource.h"
 #include "input/TypingActivityDetector.h"
+#include "environment/EnvironmentClock.h"
+#include "environment/EnvironmentResolver.h"
 
 #include <QAction>
 #include <QApplication>
@@ -69,6 +71,8 @@ AppController::AppController(QObject *parent)
     , m_speechBubble(new SpeechBubble)
     , m_inputSource(new MacInputActivitySource(this))
     , m_typingDetector(new TypingActivityDetector(m_inputSource, 1500, this))
+    , m_environmentClock(new SystemEnvironmentClock(this))
+    , m_environmentResolver(new EnvironmentResolver(m_settings, m_environmentClock, this))
 {
     connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
@@ -95,6 +99,9 @@ AppController::AppController(QObject *parent)
     });
     connect(m_typingDetector, &TypingActivityDetector::typingChanged, m_behavior, &BehaviorController::setTypingActive);
     connect(m_settings, &AppSettings::typingDetectionEnabledChanged, this, &AppController::setTypingMonitoringEnabled);
+    connect(m_environmentResolver, &EnvironmentResolver::environmentChanged, this, [this](const VariantKey &) {
+        loadCurrentVariant();
+    });
 }
 
 AppController::~AppController()
@@ -139,6 +146,7 @@ bool AppController::start()
     m_petWindow->show();
     refreshPetLibrary();
     setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
+    m_environmentResolver->start();
 
     connect(this, &AppController::petVisibilityRequested, m_petWindow, &QWidget::setVisible);
     return true;
@@ -189,24 +197,34 @@ void AppController::selectPet(const QString &id)
         m_currentAtlas.clear();
         m_petWindow->setFrame({});
         m_settingsWindow->setPreviewAtlas({}, true);
+        m_currentPackage.reset();
         return;
     }
+    m_settings->setSelectedPetId(id);
+    m_currentPackage = record->package;
+    loadCurrentVariant();
+    m_settingsWindow->setPets(m_petLibrary->pets(), id);
+}
+
+void AppController::loadCurrentVariant()
+{
+    if (!m_currentPackage) return;
     QString error;
-    const QString atlasPath = QDir(record->package.rootPath).filePath(record->package.spriteSheetPath);
+    const QString relativePath = EnvironmentResolver::atlasRelativePath(*m_currentPackage,
+                                                                         m_environmentResolver->current());
+    const QString atlasPath = QDir(m_currentPackage->rootPath).filePath(relativePath);
     const QSharedPointer<PetAtlas> atlas = m_atlasCache->load(atlasPath, &error);
     if (!atlas) {
         m_settingsWindow->setValidationReport(error, true);
         return;
     }
-    m_settings->setSelectedPetId(id);
     m_currentAtlas = atlas;
     m_animationPlayer->setAtlas(atlas);
     m_behavior->setSnapEdge(m_petWindow->snapEdge());
     applyBehaviorState(m_behavior->state());
     m_animationPlayer->setSpeedFactor(m_settings->animationSpeed());
-    m_settingsWindow->setPreviewAtlas(atlas, record->package.renderMode == RenderMode::Smooth);
+    m_settingsWindow->setPreviewAtlas(atlas, m_currentPackage->renderMode == RenderMode::Smooth);
     m_settingsWindow->setValidationReport({}, false);
-    m_settingsWindow->setPets(m_petLibrary->pets(), id);
 }
 
 void AppController::applyBehaviorState(BehaviorState state)
@@ -248,7 +266,9 @@ void AppController::applyBehaviorState(BehaviorState state)
 void AppController::handlePetClick()
 {
     m_behavior->triggerClick();
-    m_quoteProvider->requestQuote({m_settings->selectedPetId(), QStringLiteral("click"), {}},
+    m_quoteProvider->requestQuote({m_settings->selectedPetId(),
+                                   QStringLiteral("click"),
+                                   m_environmentResolver->current().combinedName()},
                                   QUuid::createUuid());
 }
 

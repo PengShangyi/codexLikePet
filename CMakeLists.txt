@@ -77,6 +77,12 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/input/MacInputActivitySource.mm
     src/input/TypingActivityDetector.cpp
     src/input/TypingActivityDetector.h
+    src/environment/EnvironmentClock.cpp
+    src/environment/EnvironmentClock.h
+    src/environment/EnvironmentResolver.cpp
+    src/environment/EnvironmentResolver.h
+    src/environment/EnvironmentState.cpp
+    src/environment/EnvironmentState.h
     src/pet/WindowPlacement.cpp
     src/pet/WindowPlacement.h
     src/platform/MacApplication.h

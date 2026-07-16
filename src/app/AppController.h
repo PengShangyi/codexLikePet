@@ -2,8 +2,10 @@
 
 #include <QObject>
 #include <QSharedPointer>
+#include <optional>
 
 #include "pet/BehaviorController.h"
+#include "resources/PetPackage.h"
 
 class QAction;
 class QMenu;
@@ -22,6 +24,8 @@ class QuoteProvider;
 class SpeechBubble;
 class InputActivitySource;
 class TypingActivityDetector;
+class EnvironmentClock;
+class EnvironmentResolver;
 
 class AppController final : public QObject
 {
@@ -48,6 +52,7 @@ private:
     void applyBehaviorState(BehaviorState state);
     void handlePetClick();
     void setTypingMonitoringEnabled(bool enabled);
+    void loadCurrentVariant();
 
     QSystemTrayIcon *m_trayIcon;
     QMenu *m_menu;
@@ -68,5 +73,8 @@ private:
     SpeechBubble *m_speechBubble;
     InputActivitySource *m_inputSource;
     TypingActivityDetector *m_typingDetector;
+    EnvironmentClock *m_environmentClock;
+    EnvironmentResolver *m_environmentResolver;
+    std::optional<PetPackage> m_currentPackage;
     bool m_petVisible = true;
 };
