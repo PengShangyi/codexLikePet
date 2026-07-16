@@ -7,3 +7,4 @@ Additional vendored dependencies, including miniz and Hatch Pet, must retain
 their upstream licenses in their respective source directories and in the final
 application's license resources.
 
+- miniz 3.1.2, MIT license: `third_party/miniz/LICENSE`

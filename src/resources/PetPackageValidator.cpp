@@ -313,6 +313,17 @@ void PetPackageValidator::validateDirectoryEnvelope(const QString &rootPath,
         }
         if (info.isFile()) {
             totalBytes += info.size();
+            const QString suffix = info.suffix().toLower();
+            const QString base = info.fileName().toLower();
+            const bool allowed = suffix == QStringLiteral("json") || suffix == QStringLiteral("png")
+                || suffix == QStringLiteral("webp") || suffix == QStringLiteral("txt")
+                || suffix == QStringLiteral("md") || base.startsWith(QStringLiteral("license"));
+            if (!allowed) {
+                addIssue(result,
+                         QStringLiteral("package.fileType"),
+                         QStringLiteral("Unsupported file in package"),
+                         QDir(rootPath).relativeFilePath(info.filePath()));
+            }
             if (info.permission(QFileDevice::ExeOwner | QFileDevice::ExeGroup | QFileDevice::ExeOther)) {
                 addIssue(result,
                          QStringLiteral("package.executable"),
