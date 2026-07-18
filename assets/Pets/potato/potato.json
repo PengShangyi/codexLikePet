@@ -3,7 +3,9 @@
   "renderMode": "smooth",
   "variants": {
     "spring-day": "spritesheet.webp",
-    "summer-day": "variants/summer-day.webp"
+    "summer-day": "variants/summer-day.webp",
+    "autumn-day": "variants/autumn-day.webp",
+    "winter-day": "variants/winter-day.webp"
   },
   "clips": {},
   "variantClips": {}

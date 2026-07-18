@@ -20,6 +20,10 @@ private slots:
                  QStringLiteral("spritesheet.webp"));
         QCOMPARE(result.package.variants.value(QStringLiteral("summer-day")),
                  QStringLiteral("variants/summer-day.webp"));
+        QCOMPARE(result.package.variants.value(QStringLiteral("autumn-day")),
+                 QStringLiteral("variants/autumn-day.webp"));
+        QCOMPARE(result.package.variants.value(QStringLiteral("winter-day")),
+                 QStringLiteral("variants/winter-day.webp"));
     }
 };
 
