@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "renderMode": "smooth",
+  "variants": {
+    "spring-day": "spritesheet.webp",
+    "summer-day": "variants/summer-day.webp"
+  },
+  "clips": {},
+  "variantClips": {}
+}

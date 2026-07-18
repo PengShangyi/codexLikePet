@@ -51,6 +51,22 @@ target_include_directories(potato_package_validator_test PRIVATE ../src)
 target_link_libraries(potato_package_validator_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME potato_package_validator_test COMMAND potato_package_validator_test)
 
+qt_add_executable(potato_builtin_pet_test
+    test_builtin_pet.cpp
+    ../src/pet/PetAtlas.cpp
+    ../src/pet/PetAtlas.h
+    ../src/resources/PetPackage.cpp
+    ../src/resources/PetPackage.h
+    ../src/resources/PetPackageValidator.cpp
+    ../src/resources/PetPackageValidator.h
+)
+target_include_directories(potato_builtin_pet_test PRIVATE ../src)
+target_compile_definitions(potato_builtin_pet_test PRIVATE
+    POTATO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(potato_builtin_pet_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME potato_builtin_pet_test COMMAND potato_builtin_pet_test)
+
 qt_add_executable(potato_package_importer_test
     test_package_importer.cpp
     ../src/pet/PetAtlas.cpp

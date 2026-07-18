@@ -1,0 +1,7 @@
+{
+  "id": "potato",
+  "displayName": "Potato",
+  "description": "A tiny original potato companion that changes with the seasons and time of day.",
+  "spriteVersionNumber": 2,
+  "spritesheetPath": "spritesheet.webp"
+}
