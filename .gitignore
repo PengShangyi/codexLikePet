@@ -12,6 +12,7 @@ CMakeUserPresets.json
 
 # Project-local tools and Python caches
 /.tools/
+/aqtinstall.log
 .venv/
 __pycache__/
 *.py[cod]
@@ -28,4 +29,3 @@ __pycache__/
 *.dmg
 *.pkg
 *.xcarchive
-

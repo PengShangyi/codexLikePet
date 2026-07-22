@@ -155,7 +155,7 @@ void PetWindow::paintEvent(QPaintEvent *)
         return;
     }
 
-    // Development-only fallback until the validated built-in pet is packaged.
+    // Defensive fallback used only when no validated pet frame is available.
     const QRectF body(width() * 0.17, height() * 0.18, width() * 0.66, height() * 0.68);
     painter.setPen(QPen(QColor(86, 57, 38), std::max(2.0, width() / 80.0)));
     painter.setBrush(QColor(205, 154, 92));

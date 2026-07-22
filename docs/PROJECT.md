@@ -19,8 +19,9 @@ scoped Objective-C++ adapters for macOS-only services.
 
 - Imported pets belong in the user's Application Support directory, outside the
   repository. Development imports under `local/` are ignored.
-- Keyboard monitoring is opt-in and records only monotonic activity timestamps
-  in memory. Key values must never enter models, logs, settings, tests, or files.
+- Keyboard monitoring is opt-in and retains only a short rolling window of
+  monotonic activity timestamps in memory, from which activity frequency is
+  derived. Key values must never enter models, logs, settings, tests, or files.
 - Release builds do not write persistent logs and do not initiate network access.
 - Generated image runs and QA artifacts stay ignored; only approved built-in
   release assets are tracked through Git LFS.
@@ -34,3 +35,30 @@ scoped Objective-C++ adapters for macOS-only services.
 - The first release artifact is a local arm64 app bundle. Signing, notarization,
   and DMG publication are a later release gate.
 
+## Runtime ownership
+
+- `AppController` owns application lifecycle and connects otherwise isolated
+  services; platform adapters do not own settings or pet resources.
+- `BehaviorController` is the sole behavior-priority authority. Rendering code
+  receives a resolved state and never invents transitions.
+- `EnvironmentResolver` is the sole season/day-night fallback authority and is
+  driven through an injectable `EnvironmentClock`.
+- `AnimationPlayer` accepts either a v2 atlas row or one validated Potato clip.
+  Reduced motion freezes either source on its representative first frame.
+- `PetPackageValidator`, `ArchiveExtractor`, and `PetStore` respectively own
+  contract validation, hostile archive boundaries, and staged atomic install.
+- `InputActivitySource`, `SystemActivitySource`, `LoginItemController`, and
+  `QuoteProvider` are replaceable boundaries with deterministic test doubles.
+
+The application decodes resources lazily, retains at most two atlas cache
+entries, clears extension clips on environment or pet changes, stops pet,
+environment, and input timers while hidden or asleep, and recomputes primary
+screen placement after display changes and wake.
+
+## Persistent locations
+
+- Preferences: native `QSettings` domain for `com.peng.Potato`.
+- Imported pets: `~/Library/Application Support/Potato/Pets`.
+- Login state: Apple Service Management only; no custom LaunchAgent.
+- Repository-local tools: `.tools/` (ignored).
+- Built-in pets and bundled authoring skill: read-only app resources.
