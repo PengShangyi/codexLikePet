@@ -18,12 +18,20 @@ private slots:
         QCOMPARE(result.package.id, QStringLiteral("potato"));
         QCOMPARE(result.package.variants.value(QStringLiteral("spring-day")),
                  QStringLiteral("spritesheet.webp"));
+        QCOMPARE(result.package.variants.value(QStringLiteral("spring-night")),
+                 QStringLiteral("variants/spring-night.webp"));
         QCOMPARE(result.package.variants.value(QStringLiteral("summer-day")),
                  QStringLiteral("variants/summer-day.webp"));
+        QCOMPARE(result.package.variants.value(QStringLiteral("summer-night")),
+                 QStringLiteral("variants/summer-night.webp"));
         QCOMPARE(result.package.variants.value(QStringLiteral("autumn-day")),
                  QStringLiteral("variants/autumn-day.webp"));
+        QCOMPARE(result.package.variants.value(QStringLiteral("autumn-night")),
+                 QStringLiteral("variants/autumn-night.webp"));
         QCOMPARE(result.package.variants.value(QStringLiteral("winter-day")),
                  QStringLiteral("variants/winter-day.webp"));
+        QCOMPARE(result.package.variants.value(QStringLiteral("winter-night")),
+                 QStringLiteral("variants/winter-night.webp"));
     }
 };
 
