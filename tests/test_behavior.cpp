@@ -41,6 +41,16 @@ private slots:
         QVERIFY(available.contains(QRect(edgePlacement, bubble)));
     }
 
+    void speechBubbleFollowsThePetWindowLevelPreference()
+    {
+        SpeechBubble bubble;
+        QVERIFY(bubble.windowFlags().testFlag(Qt::WindowStaysOnTopHint));
+        bubble.setAlwaysOnTop(false);
+        QVERIFY(!bubble.windowFlags().testFlag(Qt::WindowStaysOnTopHint));
+        bubble.setAlwaysOnTop(true);
+        QVERIFY(bubble.windowFlags().testFlag(Qt::WindowStaysOnTopHint));
+    }
+
     void fixedProviderReturnsOnlyThePlaceholder()
     {
         qRegisterMetaType<Quote>();

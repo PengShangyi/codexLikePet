@@ -1,31 +1,45 @@
 #include "settings/AppSettings.h"
 
 #include <QSettings>
+#include <QPair>
+#include <QVector>
 
 #include <algorithm>
+#include <cmath>
+
+namespace {
+double boundedSetting(const QVariant &stored, double fallback)
+{
+    bool ok = false;
+    const double value = stored.toDouble(&ok);
+    return ok && std::isfinite(value) ? std::clamp(value, 0.5, 2.0) : fallback;
+}
+}
 
 AppSettings::AppSettings(QObject *parent)
     : QObject(parent)
     , m_settings(std::make_unique<QSettings>())
 {
+    migrate();
 }
 
 AppSettings::AppSettings(const QString &iniFilePath, QObject *parent)
     : QObject(parent)
     , m_settings(std::make_unique<QSettings>(iniFilePath, QSettings::IniFormat))
 {
+    migrate();
 }
 
 AppSettings::~AppSettings() = default;
 
 double AppSettings::scale() const
 {
-    return std::clamp(m_settings->value(QStringLiteral("appearance/scale"), 1.0).toDouble(), 0.5, 2.0);
+    return boundedSetting(m_settings->value(QStringLiteral("appearance/scale"), 1.0), 1.0);
 }
 
 double AppSettings::animationSpeed() const
 {
-    return std::clamp(m_settings->value(QStringLiteral("appearance/animationSpeed"), 1.0).toDouble(), 0.5, 2.0);
+    return boundedSetting(m_settings->value(QStringLiteral("appearance/animationSpeed"), 1.0), 1.0);
 }
 
 bool AppSettings::alwaysOnTop() const
@@ -55,12 +69,14 @@ Hemisphere AppSettings::hemisphere() const
 
 QTime AppSettings::dayStartsAt() const
 {
-    return m_settings->value(QStringLiteral("environment/dayStart"), QTime(7, 0)).toTime();
+    const QTime value = m_settings->value(QStringLiteral("environment/dayStart"), QTime(7, 0)).toTime();
+    return value.isValid() ? value : QTime(7, 0);
 }
 
 QTime AppSettings::nightStartsAt() const
 {
-    return m_settings->value(QStringLiteral("environment/nightStart"), QTime(19, 0)).toTime();
+    const QTime value = m_settings->value(QStringLiteral("environment/nightStart"), QTime(19, 0)).toTime();
+    return value.isValid() ? value : QTime(19, 0);
 }
 
 AppLanguage AppSettings::language() const
@@ -75,13 +91,13 @@ QString AppSettings::selectedPetId() const
 
 void AppSettings::setScale(double value)
 {
-    value = std::clamp(value, 0.5, 2.0);
+    value = std::isfinite(value) ? std::clamp(value, 0.5, 2.0) : 1.0;
     if (writeIfChanged(QStringLiteral("appearance/scale"), value, scale())) emit scaleChanged(value);
 }
 
 void AppSettings::setAnimationSpeed(double value)
 {
-    value = std::clamp(value, 0.5, 2.0);
+    value = std::isfinite(value) ? std::clamp(value, 0.5, 2.0) : 1.0;
     if (writeIfChanged(QStringLiteral("appearance/animationSpeed"), value, animationSpeed())) emit animationSpeedChanged(value);
 }
 
@@ -135,6 +151,29 @@ void AppSettings::setSelectedPetId(const QString &value)
 {
     const QString cleaned = value.trimmed();
     if (!cleaned.isEmpty() && writeIfChanged(QStringLiteral("pets/selectedId"), cleaned, selectedPetId())) emit selectedPetIdChanged(cleaned);
+}
+
+void AppSettings::migrate()
+{
+    constexpr int currentSchemaVersion = 1;
+    const int storedVersion = m_settings->value(QStringLiteral("meta/schemaVersion"), 0).toInt();
+    if (storedVersion >= currentSchemaVersion) return;
+
+    const QVector<QPair<QString, QString>> legacyKeys = {
+        {QStringLiteral("scale"), QStringLiteral("appearance/scale")},
+        {QStringLiteral("animationSpeed"), QStringLiteral("appearance/animationSpeed")},
+        {QStringLiteral("alwaysOnTop"), QStringLiteral("appearance/alwaysOnTop")},
+        {QStringLiteral("launchAtLogin"), QStringLiteral("system/launchAtLogin")},
+        {QStringLiteral("typingDetectionEnabled"), QStringLiteral("privacy/typingDetection")},
+    };
+    for (const auto &[legacy, current] : legacyKeys) {
+        if (m_settings->contains(legacy) && !m_settings->contains(current)) {
+            m_settings->setValue(current, m_settings->value(legacy));
+        }
+        m_settings->remove(legacy);
+    }
+    m_settings->setValue(QStringLiteral("meta/schemaVersion"), currentSchemaVersion);
+    m_settings->sync();
 }
 
 template<typename T>

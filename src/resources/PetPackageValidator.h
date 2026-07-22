@@ -9,6 +9,7 @@ class PetPackageValidator final
 public:
     static constexpr int MaximumEntries = 256;
     static constexpr qint64 MaximumExpandedBytes = 512LL * 1024 * 1024;
+    static constexpr qint64 MaximumManifestBytes = 1024 * 1024;
 
     PackageValidationResult validateDirectory(const QString &directoryPath) const;
 
@@ -39,4 +40,8 @@ private:
                       const QString &context) const;
     void validateDirectoryEnvelope(const QString &rootPath,
                                    PackageValidationResult *result) const;
+    void validateKnownFiles(const QString &rootPath,
+                            const PetPackage &package,
+                            bool hasPotatoManifest,
+                            PackageValidationResult *result) const;
 };

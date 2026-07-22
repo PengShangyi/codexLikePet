@@ -17,7 +17,6 @@ PetWindow::PetWindow(AppSettings *settings, QWidget *parent)
               Qt::Tool | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus
                   | Qt::WindowStaysOnTopHint)
 {
-    m_settings = settings;
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
@@ -33,14 +32,19 @@ PetWindow::PetWindow(AppSettings *settings, QWidget *parent)
     connect(settings, &AppSettings::scaleChanged, this, &PetWindow::setScaleFactor);
     connect(settings, &AppSettings::alwaysOnTopChanged, this, &PetWindow::setAlwaysOnTop);
 
-    connect(qApp, &QGuiApplication::primaryScreenChanged, this, [this](QScreen *) {
+    const auto watchScreen = [this](QScreen *screen) {
+        if (!screen) return;
+        connect(screen,
+                &QScreen::availableGeometryChanged,
+                this,
+                &PetWindow::clampToPrimaryScreen,
+                Qt::UniqueConnection);
+    };
+    watchScreen(QGuiApplication::primaryScreen());
+    connect(qApp, &QGuiApplication::primaryScreenChanged, this, [this, watchScreen](QScreen *screen) {
+        watchScreen(screen);
         clampToPrimaryScreen();
     });
-    if (QScreen *screen = QGuiApplication::primaryScreen()) {
-        connect(screen, &QScreen::availableGeometryChanged, this, [this] {
-            clampToPrimaryScreen();
-        });
-    }
 }
 
 double PetWindow::scaleFactor() const
@@ -58,9 +62,18 @@ SnapEdge PetWindow::snapEdge() const
     return m_snapEdge;
 }
 
+bool PetWindow::usesSmoothRendering() const { return m_smoothRendering; }
+
 void PetWindow::setFrame(const QImage &frame)
 {
     m_frame = frame;
+    update();
+}
+
+void PetWindow::setSmoothRendering(bool smooth)
+{
+    if (m_smoothRendering == smooth) return;
+    m_smoothRendering = smooth;
     update();
 }
 
@@ -70,9 +83,18 @@ void PetWindow::setScaleFactor(double factor)
     if (qFuzzyCompare(m_scaleFactor, factor)) {
         return;
     }
+    const SnapEdge previousEdge = m_snapEdge;
     m_scaleFactor = factor;
     updateWindowSize();
-    clampToPrimaryScreen();
+    if (previousEdge == SnapEdge::None) {
+        clampToPrimaryScreen();
+    } else {
+        move(WindowPlacement::snappedPosition(previousEdge,
+                                               pos(),
+                                               size(),
+                                               primaryAvailableGeometry()));
+        updateSnapEdge(previousEdge);
+    }
 }
 
 void PetWindow::setAlwaysOnTop(bool enabled)
@@ -91,7 +113,7 @@ void PetWindow::setAlwaysOnTop(bool enabled)
 void PetWindow::resetPosition()
 {
     QSettings().remove(QStringLiteral("window/position"));
-    m_snapEdge = SnapEdge::None;
+    updateSnapEdge(SnapEdge::None);
     restorePosition();
 }
 
@@ -108,7 +130,7 @@ void PetWindow::restorePosition()
     m_restoringPosition = true;
     move(position);
     m_restoringPosition = false;
-    m_snapEdge = WindowPlacement::resolveSnapEdge(position, size(), available, 0);
+    updateSnapEdge(WindowPlacement::resolveSnapEdge(position, size(), available, 0));
 }
 
 void PetWindow::clampToPrimaryScreen()
@@ -119,13 +141,14 @@ void PetWindow::clampToPrimaryScreen()
     if (constrained != pos()) {
         move(constrained);
     }
+    updateSnapEdge(WindowPlacement::resolveSnapEdge(pos(), size(), primaryAvailableGeometry(), 0));
 }
 
 void PetWindow::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, m_smoothRendering);
 
     if (!m_frame.isNull()) {
         painter.drawImage(rect(), m_frame);
@@ -148,7 +171,7 @@ void PetWindow::paintEvent(QPaintEvent *)
 void PetWindow::moveEvent(QMoveEvent *event)
 {
     QWidget::moveEvent(event);
-    if (!m_restoringPosition) {
+    if (!m_restoringPosition && !m_dragging) {
         QSettings().setValue(QStringLiteral("window/position"), event->pos());
     }
 }
@@ -175,9 +198,9 @@ void PetWindow::mouseMoveEvent(QMouseEvent *event)
     }
     const QPoint global = event->globalPosition().toPoint();
     const QPoint totalDelta = global - m_pressGlobal;
-    if (!m_dragging && totalDelta.manhattanLength() >= 4) {
+    if (!m_dragging && WindowPlacement::exceedsDragThreshold(totalDelta, 4)) {
         m_dragging = true;
-        m_snapEdge = SnapEdge::None;
+        updateSnapEdge(SnapEdge::None);
         setCursor(Qt::ClosedHandCursor);
         emit dragStarted();
     }
@@ -202,14 +225,22 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event)
     setCursor(Qt::OpenHandCursor);
     if (m_dragging) {
         const QRect available = primaryAvailableGeometry();
-        m_snapEdge = WindowPlacement::resolveSnapEdge(pos(), size(), available, 24);
+        updateSnapEdge(WindowPlacement::resolveSnapEdge(pos(), size(), available, 24));
         move(WindowPlacement::snappedPosition(m_snapEdge, pos(), size(), available));
         m_dragging = false;
+        QSettings().setValue(QStringLiteral("window/position"), pos());
         emit dragFinished(m_snapEdge);
     } else {
         emit clicked();
     }
     event->accept();
+}
+
+void PetWindow::updateSnapEdge(SnapEdge edge)
+{
+    if (m_snapEdge == edge) return;
+    m_snapEdge = edge;
+    emit snapEdgeChanged(edge);
 }
 
 QRect PetWindow::primaryAvailableGeometry() const

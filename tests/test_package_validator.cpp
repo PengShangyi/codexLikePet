@@ -105,6 +105,144 @@ private slots:
         QVERIFY(!result.isValid());
         QVERIFY(result.errorMessages().join(' ').contains(QStringLiteral("Unused cell")));
     }
+
+    void acceptsTheOptionalExtendedNeutralCell()
+    {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const QString atlasPath = temp.filePath(QStringLiteral("spritesheet.png"));
+        QVERIFY(writeValidAtlas(atlasPath));
+        QImage image(atlasPath);
+        image.setPixelColor(6 * PetAtlas::CellWidth + 5, 5, Qt::red);
+        QVERIFY(image.save(atlasPath));
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("pet.json")), validPetManifest()));
+
+        const PackageValidationResult result = PetPackageValidator().validateDirectory(temp.path());
+        QVERIFY2(result.isValid(), qPrintable(result.errorMessages().join('\n')));
+    }
+
+    void rejectsUnsupportedExecutableAndSymbolicLinkEntries()
+    {
+        QTemporaryDir temp;
+        QVERIFY(writeValidAtlas(temp.filePath(QStringLiteral("spritesheet.png"))));
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("pet.json")), validPetManifest()));
+        QFile payload(temp.filePath(QStringLiteral("payload.bin")));
+        QVERIFY(payload.open(QIODevice::WriteOnly));
+        QVERIFY(payload.write("bad") > 0);
+        payload.close();
+        QVERIFY(payload.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                       | QFileDevice::ExeOwner));
+        QVERIFY(QFile::link(temp.filePath(QStringLiteral("spritesheet.png")),
+                            temp.filePath(QStringLiteral("linked.png"))));
+
+        const PackageValidationResult result = PetPackageValidator().validateDirectory(temp.path());
+        QVERIFY(!result.isValid());
+        const QString errors = result.errorMessages().join(QLatin1Char(' '));
+        QVERIFY(errors.contains(QStringLiteral("Unsupported file")));
+        QVERIFY(errors.contains(QStringLiteral("Executable")));
+        QVERIFY(errors.contains(QStringLiteral("Symbolic links")));
+    }
+
+    void rejectsPortableAbsoluteAndUnreferencedResources()
+    {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        QVERIFY(writeValidAtlas(temp.filePath(QStringLiteral("spritesheet.png"))));
+        QJsonObject manifest = validPetManifest();
+        manifest[QStringLiteral("spritesheetPath")] = QStringLiteral("C:/spritesheet.png");
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("pet.json")), manifest));
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("unused.json")), QJsonObject{}));
+
+        PackageValidationResult result = PetPackageValidator().validateDirectory(temp.path());
+        QVERIFY(!result.isValid());
+        const QString errors = result.errorMessages().join(QLatin1Char(' '));
+        QVERIFY(errors.contains(QStringLiteral("portable")));
+        QVERIFY(errors.contains(QStringLiteral("Unreferenced file")));
+
+        manifest[QStringLiteral("spritesheetPath")] = QStringLiteral("spritesheet.png");
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("pet.json")), manifest));
+        QVERIFY(QFile::remove(temp.filePath(QStringLiteral("unused.json"))));
+        QFile readme(temp.filePath(QStringLiteral("README.md")));
+        QVERIFY(readme.open(QIODevice::WriteOnly));
+        QVERIFY(readme.write("author notes") > 0);
+        readme.close();
+        result = PetPackageValidator().validateDirectory(temp.path());
+        QVERIFY2(result.isValid(), qPrintable(result.errorMessages().join('\n')));
+    }
+
+    void rejectsClipsLargerThanEightFrames()
+    {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        QVERIFY(writeValidAtlas(temp.filePath(QStringLiteral("spritesheet.png"))));
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("pet.json")), validPetManifest()));
+        QImage clip(9 * PetAtlas::CellWidth,
+                    PetAtlas::CellHeight,
+                    QImage::Format_RGBA8888);
+        clip.fill(Qt::transparent);
+        QVERIFY(clip.save(temp.filePath(QStringLiteral("too-wide.png"))));
+        QJsonArray durations;
+        for (int index = 0; index < 9; ++index) durations.append(100);
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("potato.json")),
+                          {{QStringLiteral("schemaVersion"), 1},
+                           {QStringLiteral("clips"),
+                            QJsonObject{{QStringLiteral("click"),
+                                         QJsonObject{{QStringLiteral("path"),
+                                                      QStringLiteral("too-wide.png")},
+                                                     {QStringLiteral("durationsMs"), durations}}}}}}));
+
+        const PackageValidationResult result = PetPackageValidator().validateDirectory(temp.path());
+        QVERIFY(!result.isValid());
+        QVERIFY(result.errorMessages().join(QLatin1Char(' ')).contains(QStringLiteral("1 to 8")));
+    }
+
+    void rejectsWrongManifestTypesAndOversizedJson()
+    {
+        QTemporaryDir wrongTypes;
+        QVERIFY(wrongTypes.isValid());
+        QVERIFY(writeValidAtlas(wrongTypes.filePath(QStringLiteral("spritesheet.png"))));
+        QJsonObject pet = validPetManifest();
+        pet[QStringLiteral("spritesheetPath")] = 42;
+        QVERIFY(writeJson(wrongTypes.filePath(QStringLiteral("pet.json")), pet));
+        QVERIFY(writeJson(wrongTypes.filePath(QStringLiteral("potato.json")),
+                          {{QStringLiteral("schemaVersion"), 1},
+                           {QStringLiteral("variants"), QJsonArray{QStringLiteral("bad")}}}));
+        PackageValidationResult result = PetPackageValidator().validateDirectory(wrongTypes.path());
+        QVERIFY(!result.isValid());
+        const QString errors = result.errorMessages().join(QLatin1Char(' '));
+        QVERIFY(errors.contains(QStringLiteral("spritesheetPath must be a string")));
+        QVERIFY(errors.contains(QStringLiteral("variants must be an object")));
+
+        QTemporaryDir oversized;
+        QVERIFY(oversized.isValid());
+        QFile manifest(oversized.filePath(QStringLiteral("pet.json")));
+        QVERIFY(manifest.open(QIODevice::WriteOnly));
+        QVERIFY(manifest.resize(PetPackageValidator::MaximumManifestBytes + 1));
+        manifest.close();
+        result = PetPackageValidator().validateDirectory(oversized.path());
+        QVERIFY(!result.isValid());
+        QVERIFY(result.errorMessages().join(QLatin1Char(' ')).contains(QStringLiteral("1MiB")));
+    }
+
+    void rejectsDirectoryEntryAndExpandedSizeLimits()
+    {
+        QTemporaryDir entries;
+        for (int index = 0; index <= PetPackageValidator::MaximumEntries; ++index) {
+            QVERIFY(QDir().mkpath(entries.filePath(QStringLiteral("entry-%1").arg(index))));
+        }
+        PackageValidationResult result = PetPackageValidator().validateDirectory(entries.path());
+        QVERIFY(!result.isValid());
+        QVERIFY(result.errorMessages().join(QLatin1Char(' ')).contains(QStringLiteral("more than 256 entries")));
+
+        QTemporaryDir expanded;
+        QFile huge(expanded.filePath(QStringLiteral("huge.txt")));
+        QVERIFY(huge.open(QIODevice::WriteOnly));
+        QVERIFY(huge.resize(PetPackageValidator::MaximumExpandedBytes + 1));
+        huge.close();
+        result = PetPackageValidator().validateDirectory(expanded.path());
+        QVERIFY(!result.isValid());
+        QVERIFY(result.errorMessages().join(QLatin1Char(' ')).contains(QStringLiteral("512MiB")));
+    }
 };
 
 QTEST_GUILESS_MAIN(PackageValidatorTest)

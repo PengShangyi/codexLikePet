@@ -24,7 +24,8 @@ QPoint snappedPosition(SnapEdge edge,
                        const QPoint &position,
                        const QSize &windowSize,
                        const QRect &availableGeometry);
-HorizontalDragDirection horizontalDirectionForDelta(int deltaX, int minimumDelta = 1);
+HorizontalDragDirection horizontalDirectionForDelta(int deltaX, int minimumDelta = 2);
+bool exceedsDragThreshold(const QPoint &delta, int threshold = 4);
 }
 
 Q_DECLARE_METATYPE(SnapEdge)

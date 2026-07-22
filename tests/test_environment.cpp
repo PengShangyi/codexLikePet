@@ -5,6 +5,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 
 class FakeClock final : public EnvironmentClock
 {
@@ -53,6 +54,30 @@ private slots:
                  QStringLiteral("night.webp"));
     }
 
+    void appliesVariantClipFallbackBeforeBaseClips()
+    {
+        PetPackage package;
+        package.clips.insert(QStringLiteral("click"),
+                             {QStringLiteral("base.png"), {100}});
+        package.variantClips[QStringLiteral("night")].insert(
+            QStringLiteral("click"),
+            {QStringLiteral("night.png"), {120}});
+        package.variantClips[QStringLiteral("winter-night")].insert(
+            QStringLiteral("click"),
+            {QStringLiteral("winter-night.png"), {140}});
+
+        const VariantKey key{Season::Winter, TimePhase::Night};
+        QCOMPARE(EnvironmentResolver::clipDefinition(package, key, QStringLiteral("click"))->path,
+                 QStringLiteral("winter-night.png"));
+        package.variantClips.remove(QStringLiteral("winter-night"));
+        QCOMPARE(EnvironmentResolver::clipDefinition(package, key, QStringLiteral("click"))->path,
+                 QStringLiteral("night.png"));
+        package.variantClips.clear();
+        QCOMPARE(EnvironmentResolver::clipDefinition(package, key, QStringLiteral("click"))->path,
+                 QStringLiteral("base.png"));
+        QVERIFY(!EnvironmentResolver::clipDefinition(package, key, QStringLiteral("typing")));
+    }
+
     void emitsOnlyWhenTheResolvedEnvironmentChanges()
     {
         QTemporaryDir temp;
@@ -67,6 +92,26 @@ private slots:
         resolver.reevaluate();
         QCOMPARE(spy.count(), 1);
         QCOMPARE(resolver.current().phase, TimePhase::Night);
+    }
+
+    void reevaluatesUsingLocalWallClockAcrossDstChanges()
+    {
+        QTemporaryDir temp;
+        AppSettings settings(temp.filePath(QStringLiteral("settings.ini")));
+        settings.setDayStartsAt(QTime(3, 0));
+        settings.setNightStartsAt(QTime(19, 0));
+        FakeClock clock;
+        const QTimeZone london("Europe/London");
+        QVERIFY(london.isValid());
+        clock.value = QDateTime(QDate(2026, 3, 29), QTime(0, 30), QTimeZone::UTC)
+                          .toTimeZone(london);
+        EnvironmentResolver resolver(&settings, &clock);
+        QCOMPARE(resolver.current().phase, TimePhase::Night);
+
+        clock.value = clock.value.addSecs(2 * 60 * 60);
+        QCOMPARE(clock.value.time(), QTime(3, 30));
+        resolver.reevaluate();
+        QCOMPARE(resolver.current().phase, TimePhase::Day);
     }
 };
 

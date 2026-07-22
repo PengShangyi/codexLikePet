@@ -72,6 +72,8 @@ signals:
     void selectedPetIdChanged(const QString &value);
 
 private:
+    void migrate();
+
     template<typename T>
     bool writeIfChanged(const QString &key, const T &value, const T &current);
 

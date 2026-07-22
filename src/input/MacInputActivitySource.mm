@@ -73,6 +73,11 @@ void *MacInputActivitySource::eventCallback(void *, unsigned int typeValue, void
         if (source->m_eventTap) {
             CGEventTapEnable(reinterpret_cast<CFMachPortRef>(source->m_eventTap), true);
         }
+        if (!source->isActive()) {
+            QMetaObject::invokeMethod(source,
+                                      [source] { emit source->monitoringInvalidated(); },
+                                      Qt::QueuedConnection);
+        }
         return event;
     }
     if (type == kCGEventKeyDown) {

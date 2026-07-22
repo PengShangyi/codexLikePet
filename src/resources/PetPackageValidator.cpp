@@ -10,6 +10,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
+#include <QSet>
+
+#include <algorithm>
 
 namespace {
 void addIssue(PackageValidationResult *result,
@@ -54,7 +57,13 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
     result.package.id = petObject.value(QStringLiteral("id")).toString();
     result.package.displayName = petObject.value(QStringLiteral("displayName")).toString().trimmed();
     result.package.description = petObject.value(QStringLiteral("description")).toString().trimmed();
-    result.package.spriteSheetPath = petObject.value(QStringLiteral("spritesheetPath")).toString();
+    const QJsonValue spriteSheetValue = petObject.value(QStringLiteral("spritesheetPath"));
+    if (!spriteSheetValue.isUndefined() && !spriteSheetValue.isString()) {
+        addIssue(&result,
+                 QStringLiteral("pet.spritesheetPath"),
+                 QStringLiteral("spritesheetPath must be a string"));
+    }
+    result.package.spriteSheetPath = spriteSheetValue.toString();
     if (result.package.spriteSheetPath.isEmpty()) {
         result.package.spriteSheetPath = QStringLiteral("spritesheet.webp");
     }
@@ -72,7 +81,8 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
     validateAtlas(rootPath, result.package.spriteSheetPath, &result, QStringLiteral("base"));
 
     const QString potatoPath = QDir(rootPath).filePath(QStringLiteral("potato.json"));
-    if (QFileInfo::exists(potatoPath)) {
+    const bool hasPotatoManifest = QFileInfo::exists(potatoPath);
+    if (hasPotatoManifest) {
         QJsonObject potatoObject;
         if (!readJsonObject(potatoPath, &potatoObject, &error)) {
             addIssue(&result, QStringLiteral("potato.manifest"), error, QStringLiteral("potato.json"));
@@ -80,11 +90,17 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
             parsePotatoManifest(rootPath, potatoObject, &result);
         }
     }
+    validateKnownFiles(rootPath, result.package, hasPotatoManifest, &result);
     return result;
 }
 
 bool PetPackageValidator::readJsonObject(const QString &path, QJsonObject *object, QString *error)
 {
+    const QFileInfo info(path);
+    if (info.size() > MaximumManifestBytes) {
+        *error = QStringLiteral("%1 exceeds the 1MiB manifest limit").arg(info.fileName());
+        return false;
+    }
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         *error = QStringLiteral("Unable to read %1").arg(QFileInfo(path).fileName());
@@ -105,8 +121,18 @@ bool PetPackageValidator::isSafeRelativePath(const QString &rootPath,
                                              const QString &relativePath,
                                              QString *error)
 {
-    if (relativePath.isEmpty() || QDir::isAbsolutePath(relativePath)) {
-        *error = QStringLiteral("Path must be non-empty and relative");
+    const bool windowsDrivePath = relativePath.size() >= 2
+        && relativePath.at(0).isLetter() && relativePath.at(1) == QLatin1Char(':');
+    const bool hasControlCharacter = std::any_of(relativePath.cbegin(),
+                                                  relativePath.cend(),
+                                                  [](QChar character) {
+                                                      const ushort value = character.unicode();
+                                                      return value < 0x20 || value == 0x7f;
+                                                  });
+    if (relativePath.isEmpty() || relativePath.contains(QChar::Null)
+        || hasControlCharacter || relativePath.contains(QLatin1Char('\\')) || windowsDrivePath
+        || QDir::isAbsolutePath(relativePath)) {
+        *error = QStringLiteral("Path must be a portable, non-empty relative path");
         return false;
     }
     const QString clean = QDir::cleanPath(relativePath);
@@ -150,7 +176,13 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
         addIssue(result, QStringLiteral("potato.version"), QStringLiteral("potato.json schemaVersion must be 1"));
     }
 
-    const QString renderMode = object.value(QStringLiteral("renderMode")).toString(QStringLiteral("smooth"));
+    const QJsonValue renderModeValue = object.value(QStringLiteral("renderMode"));
+    if (!renderModeValue.isUndefined() && !renderModeValue.isString()) {
+        addIssue(result,
+                 QStringLiteral("potato.renderMode"),
+                 QStringLiteral("renderMode must be a string"));
+    }
+    const QString renderMode = renderModeValue.toString(QStringLiteral("smooth"));
     if (renderMode == QStringLiteral("nearest")) {
         result->package.renderMode = RenderMode::Nearest;
     } else if (renderMode == QStringLiteral("smooth")) {
@@ -159,7 +191,13 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
         addIssue(result, QStringLiteral("potato.renderMode"), QStringLiteral("renderMode must be smooth or nearest"));
     }
 
-    const QJsonObject variants = object.value(QStringLiteral("variants")).toObject();
+    const QJsonValue variantsValue = object.value(QStringLiteral("variants"));
+    if (!variantsValue.isUndefined() && !variantsValue.isObject()) {
+        addIssue(result,
+                 QStringLiteral("potato.variants"),
+                 QStringLiteral("variants must be an object"));
+    }
+    const QJsonObject variants = variantsValue.toObject();
     for (auto iterator = variants.begin(); iterator != variants.end(); ++iterator) {
         if (!isKnownVariantKey(iterator.key())) {
             addIssue(result,
@@ -167,23 +205,49 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
                      QStringLiteral("Unknown variant key: %1").arg(iterator.key()));
             continue;
         }
+        if (!iterator.value().isString()) {
+            addIssue(result,
+                     QStringLiteral("variant.path"),
+                     QStringLiteral("Variant paths must be strings"),
+                     iterator.key());
+            continue;
+        }
         const QString path = iterator.value().toString();
         result->package.variants.insert(iterator.key(), path);
         validateAtlas(rootPath, path, result, QStringLiteral("variant %1").arg(iterator.key()));
     }
 
+    const QJsonValue clipsValue = object.value(QStringLiteral("clips"));
+    if (!clipsValue.isUndefined() && !clipsValue.isObject()) {
+        addIssue(result,
+                 QStringLiteral("potato.clips"),
+                 QStringLiteral("clips must be an object"));
+    }
     parseClips(rootPath,
-               object.value(QStringLiteral("clips")).toObject(),
+               clipsValue.toObject(),
                &result->package.clips,
                result,
                QStringLiteral("base"));
 
-    const QJsonObject variantClips = object.value(QStringLiteral("variantClips")).toObject();
+    const QJsonValue variantClipsValue = object.value(QStringLiteral("variantClips"));
+    if (!variantClipsValue.isUndefined() && !variantClipsValue.isObject()) {
+        addIssue(result,
+                 QStringLiteral("potato.variantClips"),
+                 QStringLiteral("variantClips must be an object"));
+    }
+    const QJsonObject variantClips = variantClipsValue.toObject();
     for (auto iterator = variantClips.begin(); iterator != variantClips.end(); ++iterator) {
         if (!isKnownVariantKey(iterator.key())) {
             addIssue(result,
                      QStringLiteral("variantClip.key"),
                      QStringLiteral("Unknown variant clip key: %1").arg(iterator.key()));
+            continue;
+        }
+        if (!iterator.value().isObject()) {
+            addIssue(result,
+                     QStringLiteral("variantClip.value"),
+                     QStringLiteral("Each variantClips value must be an object"),
+                     iterator.key());
             continue;
         }
         auto &destination = result->package.variantClips[iterator.key()];
@@ -208,7 +272,22 @@ void PetPackageValidator::parseClips(const QString &rootPath,
                      QStringLiteral("Unknown clip key: %1").arg(iterator.key()));
             continue;
         }
+        if (!iterator.value().isObject()) {
+            addIssue(result,
+                     QStringLiteral("clip.definition"),
+                     QStringLiteral("Clip definitions must be objects"),
+                     iterator.key());
+            continue;
+        }
         const QJsonObject definition = iterator.value().toObject();
+        if (!definition.value(QStringLiteral("path")).isString()
+            || !definition.value(QStringLiteral("durationsMs")).isArray()) {
+            addIssue(result,
+                     QStringLiteral("clip.definition"),
+                     QStringLiteral("Clip definitions require a string path and durationsMs array"),
+                     iterator.key());
+            continue;
+        }
         ClipDefinition clip{definition.value(QStringLiteral("path")).toString(),
                             parseDurations(definition.value(QStringLiteral("durationsMs")))};
         clips->insert(iterator.key(), clip);
@@ -260,9 +339,20 @@ void PetPackageValidator::validateClip(const QString &rootPath,
         return;
     }
     QImageReader reader(QDir(rootPath).filePath(clip.path));
+    reader.setAutoTransform(false);
+    const QSize size = reader.size();
+    const int frames = size.width() / PetAtlas::CellWidth;
+    if (!size.isValid() || size.height() != PetAtlas::CellHeight
+        || size.width() % PetAtlas::CellWidth != 0 || frames < 1 || frames > 8) {
+        addIssue(result,
+                 QStringLiteral("clip.geometry"),
+                 QStringLiteral("%1 %2 clip must contain 1 to 8 transparent 192x208 cells")
+                     .arg(context, name),
+                 clip.path);
+        return;
+    }
     const QImage image = reader.read();
-    if (image.isNull() || !image.hasAlphaChannel() || image.height() != PetAtlas::CellHeight
-        || image.width() % PetAtlas::CellWidth != 0) {
+    if (image.isNull() || !image.hasAlphaChannel()) {
         addIssue(result,
                  QStringLiteral("clip.geometry"),
                  QStringLiteral("%1 %2 clip must be transparent and use 192x208 cells")
@@ -270,8 +360,7 @@ void PetPackageValidator::validateClip(const QString &rootPath,
                  clip.path);
         return;
     }
-    const int frames = image.width() / PetAtlas::CellWidth;
-    if (frames < 1 || frames > 8 || clip.durationsMs.size() != frames) {
+    if (clip.durationsMs.size() != frames) {
         addIssue(result,
                  QStringLiteral("clip.frames"),
                  QStringLiteral("%1 %2 clip frame count and durations do not match")
@@ -290,6 +379,52 @@ void PetPackageValidator::validateClip(const QString &rootPath,
     }
 }
 
+void PetPackageValidator::validateKnownFiles(const QString &rootPath,
+                                             const PetPackage &package,
+                                             bool hasPotatoManifest,
+                                             PackageValidationResult *result) const
+{
+    const auto comparisonKey = [](const QString &path) {
+        return QDir::cleanPath(path).normalized(QString::NormalizationForm_C).toCaseFolded();
+    };
+    QSet<QString> knownPaths{comparisonKey(QStringLiteral("pet.json")),
+                             comparisonKey(package.spriteSheetPath)};
+    if (hasPotatoManifest) knownPaths.insert(comparisonKey(QStringLiteral("potato.json")));
+    for (const QString &path : package.variants) knownPaths.insert(comparisonKey(path));
+    for (const ClipDefinition &clip : package.clips) knownPaths.insert(comparisonKey(clip.path));
+    for (const auto &clips : package.variantClips) {
+        for (const ClipDefinition &clip : clips) knownPaths.insert(comparisonKey(clip.path));
+    }
+
+    QDirIterator iterator(rootPath, QDir::Files | QDir::NoDotAndDotDot,
+                          QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        iterator.next();
+        const QFileInfo info = iterator.fileInfo();
+        if (info.isSymLink()) continue;
+        const QString relative = QDir(rootPath).relativeFilePath(info.filePath());
+        if (knownPaths.contains(comparisonKey(relative))) continue;
+
+        const QString base = info.fileName().toLower();
+        const QString relativeLower = relative.toLower();
+        const QString suffix = info.suffix().toLower();
+        const bool textDocument = suffix.isEmpty() || suffix == QStringLiteral("md")
+            || suffix == QStringLiteral("txt");
+        const bool documentation = textDocument
+            && (base == QStringLiteral("readme.md")
+                || base == QStringLiteral("readme.txt")
+                || base.startsWith(QStringLiteral("license"))
+                || base.startsWith(QStringLiteral("notice"))
+                || relativeLower.startsWith(QStringLiteral("licenses/")));
+        if (!documentation) {
+            addIssue(result,
+                     QStringLiteral("package.unknownFile"),
+                     QStringLiteral("Unreferenced file is not allowed in a pet package"),
+                     relative);
+        }
+    }
+}
+
 void PetPackageValidator::validateDirectoryEnvelope(const QString &rootPath,
                                                     PackageValidationResult *result) const
 {
@@ -300,6 +435,7 @@ void PetPackageValidator::validateDirectoryEnvelope(const QString &rootPath,
     while (iterator.hasNext()) {
         iterator.next();
         const QFileInfo info = iterator.fileInfo();
+        const QString relative = QDir(rootPath).relativeFilePath(info.filePath());
         ++entries;
         if (entries > MaximumEntries) {
             addIssue(result, QStringLiteral("package.entries"), QStringLiteral("Package has more than 256 entries"));
@@ -309,7 +445,18 @@ void PetPackageValidator::validateDirectoryEnvelope(const QString &rootPath,
             addIssue(result,
                      QStringLiteral("package.symlink"),
                      QStringLiteral("Symbolic links are not allowed"),
-                     QDir(rootPath).relativeFilePath(info.filePath()));
+                     relative);
+        }
+        const bool hasControlCharacter = std::any_of(relative.cbegin(),
+                                                      relative.cend(),
+                                                      [](QChar character) {
+                                                          const ushort value = character.unicode();
+                                                          return value < 0x20 || value == 0x7f;
+                                                      });
+        if (hasControlCharacter) {
+            addIssue(result,
+                     QStringLiteral("package.path"),
+                     QStringLiteral("Control characters are not allowed in package paths"));
         }
         if (info.isFile()) {
             totalBytes += info.size();
@@ -322,13 +469,15 @@ void PetPackageValidator::validateDirectoryEnvelope(const QString &rootPath,
                 addIssue(result,
                          QStringLiteral("package.fileType"),
                          QStringLiteral("Unsupported file in package"),
-                         QDir(rootPath).relativeFilePath(info.filePath()));
+                         relative);
             }
-            if (info.permission(QFileDevice::ExeOwner | QFileDevice::ExeGroup | QFileDevice::ExeOther)) {
+            const QFileDevice::Permissions executableBits = QFileDevice::ExeOwner
+                | QFileDevice::ExeGroup | QFileDevice::ExeOther;
+            if (info.permissions() & executableBits) {
                 addIssue(result,
                          QStringLiteral("package.executable"),
                          QStringLiteral("Executable files are not allowed"),
-                         QDir(rootPath).relativeFilePath(info.filePath()));
+                         relative);
             }
         }
         if (totalBytes > MaximumExpandedBytes) {

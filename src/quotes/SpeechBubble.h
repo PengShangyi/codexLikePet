@@ -11,6 +11,7 @@ class SpeechBubble final : public QWidget
 public:
     explicit SpeechBubble(QWidget *parent = nullptr);
 
+    void setAlwaysOnTop(bool enabled);
     void showMessage(const QString &text,
                      const QRect &petGeometry,
                      const QRect &availableGeometry,
@@ -22,6 +23,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
 
 private:
     QString m_text;

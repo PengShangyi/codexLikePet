@@ -9,9 +9,13 @@
 int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
+    const bool runtimeCheck = application.arguments().contains(
+        QStringLiteral("--potato-runtime-check"));
     QCoreApplication::setOrganizationName(QStringLiteral("Peng"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("com.peng"));
-    QCoreApplication::setApplicationName(QStringLiteral("Potato"));
+    QCoreApplication::setApplicationName(runtimeCheck
+                                             ? QStringLiteral("PotatoRuntimeCheck")
+                                             : QStringLiteral("Potato"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
 
     SingleInstance instance(QStringLiteral("com.peng.potato.%1").arg(getuid()));
@@ -20,7 +24,7 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    AppController controller;
+    AppController controller(runtimeCheck ? AppRunMode::RuntimeCheck : AppRunMode::Normal);
     QObject::connect(&instance, &SingleInstance::messageReceived, &controller,
                      [&controller](const QString &message) {
                          if (message == QStringLiteral("show-settings")) {

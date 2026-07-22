@@ -1,15 +1,31 @@
 #include "resources/PetStore.h"
 
+#include "resources/PetPackageValidator.h"
+
 #include <QDir>
 #include <QDirIterator>
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUuid>
 
-PetStore::PetStore(QString petsRoot)
+#include <utility>
+
+namespace {
+bool removePathWithoutFollowingLinks(const QString &path)
+{
+    const QFileInfo info(path);
+    if (info.isSymLink() || info.isFile()) return QFile::remove(path);
+    if (info.isDir()) return QDir(path).removeRecursively();
+    return !info.exists();
+}
+}
+
+PetStore::PetStore(QString petsRoot, std::function<bool()> activationGate)
     : m_petsRoot(petsRoot.isEmpty() ? defaultPetsRoot() : QDir::cleanPath(petsRoot))
+    , m_activationGate(std::move(activationGate))
 {
 }
 
@@ -40,27 +56,37 @@ bool PetStore::install(const PackageValidationResult &validation,
     const QString targetPath = QDir(m_petsRoot).filePath(targetName);
 
     if (!copyDirectory(validation.package.rootPath, stagePath, error)) {
-        QDir(stagePath).removeRecursively();
+        removePathWithoutFollowingLinks(stagePath);
+        return false;
+    }
+    const PackageValidationResult staged = PetPackageValidator().validateDirectory(stagePath);
+    if (!staged.isValid() || staged.package.id != validation.package.id) {
+        removePathWithoutFollowingLinks(stagePath);
+        *error = staged.isValid()
+            ? QStringLiteral("Pet package identity changed while it was being imported")
+            : QStringLiteral("Copied pet package failed revalidation: %1")
+                  .arg(staged.errorMessages().join(QLatin1Char('\n')));
         return false;
     }
 
     QDir root(m_petsRoot);
-    const bool hadExisting = QFileInfo::exists(targetPath);
+    const QFileInfo targetInfo(targetPath);
+    const bool hadExisting = targetInfo.exists() || targetInfo.isSymLink();
     if (hadExisting && !root.rename(targetName, backupName)) {
-        QDir(stagePath).removeRecursively();
+        removePathWithoutFollowingLinks(stagePath);
         *error = QStringLiteral("Unable to preserve the existing pet during update");
         return false;
     }
-    if (!root.rename(stageName, targetName)) {
-        if (hadExisting) {
-            root.rename(backupName, targetName);
-        }
-        QDir(stagePath).removeRecursively();
-        *error = QStringLiteral("Unable to activate the imported pet");
+    const bool activationAllowed = !m_activationGate || m_activationGate();
+    if (!activationAllowed || !root.rename(stageName, targetName)) {
+        const bool restored = !hadExisting || root.rename(backupName, targetName);
+        removePathWithoutFollowingLinks(stagePath);
+        *error = restored ? QStringLiteral("Unable to activate the imported pet; previous pet restored")
+                          : QStringLiteral("Unable to activate the imported pet or restore the previous pet");
         return false;
     }
     if (hadExisting) {
-        QDir(backupPath).removeRecursively();
+        removePathWithoutFollowingLinks(backupPath);
     }
     if (installedPath) {
         *installedPath = targetPath;
@@ -76,10 +102,11 @@ bool PetStore::remove(const QString &petId, QString *error) const
         return false;
     }
     const QString path = QDir(m_petsRoot).filePath(petId);
-    if (!QFileInfo::exists(path)) {
+    const QFileInfo info(path);
+    if (!info.exists() && !info.isSymLink()) {
         return true;
     }
-    if (!QDir(path).removeRecursively()) {
+    if (!removePathWithoutFollowingLinks(path)) {
         *error = QStringLiteral("Unable to remove pet");
         return false;
     }
@@ -88,12 +115,28 @@ bool PetStore::remove(const QString &petId, QString *error) const
 
 QString PetStore::defaultPetsRoot()
 {
+    const QString applicationName = QCoreApplication::applicationName().isEmpty()
+        ? QStringLiteral("Potato")
+        : QCoreApplication::applicationName();
     return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation))
-        .filePath(QStringLiteral("Potato/Pets"));
+        .filePath(applicationName + QStringLiteral("/Pets"));
 }
 
 bool PetStore::copyDirectory(const QString &source, const QString &destination, QString *error)
 {
+    const QString canonicalSource = QFileInfo(source).canonicalFilePath();
+    const QFileInfo destinationInfo(destination);
+    const QString canonicalDestinationParent = QFileInfo(destinationInfo.absolutePath())
+                                                   .canonicalFilePath();
+    const QString absoluteDestination = canonicalDestinationParent.isEmpty()
+        ? destinationInfo.absoluteFilePath()
+        : QDir(canonicalDestinationParent).filePath(destinationInfo.fileName());
+    if (!canonicalSource.isEmpty()
+        && (absoluteDestination == canonicalSource
+            || absoluteDestination.startsWith(canonicalSource + QDir::separator()))) {
+        *error = QStringLiteral("Install staging cannot be created inside the imported package");
+        return false;
+    }
     if (!QDir().mkpath(destination)) {
         *error = QStringLiteral("Unable to create install staging directory");
         return false;

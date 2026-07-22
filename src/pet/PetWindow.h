@@ -22,7 +22,9 @@ public:
     double scaleFactor() const;
     bool isAlwaysOnTop() const;
     SnapEdge snapEdge() const;
+    bool usesSmoothRendering() const;
     void setFrame(const QImage &frame);
+    void setSmoothRendering(bool smooth);
 
 public slots:
     void setScaleFactor(double factor);
@@ -35,6 +37,7 @@ signals:
     void dragStarted();
     void dragDirectionChanged(HorizontalDragDirection direction);
     void dragFinished(SnapEdge edge);
+    void snapEdgeChanged(SnapEdge edge);
     void clicked();
 
 protected:
@@ -47,12 +50,13 @@ protected:
 private:
     QRect primaryAvailableGeometry() const;
     void updateWindowSize();
+    void updateSnapEdge(SnapEdge edge);
 
     QImage m_frame;
     double m_scaleFactor = 1.0;
     bool m_alwaysOnTop = true;
+    bool m_smoothRendering = true;
     bool m_restoringPosition = false;
-    AppSettings *m_settings;
     bool m_pointerDown = false;
     bool m_dragging = false;
     QPoint m_pressGlobal;

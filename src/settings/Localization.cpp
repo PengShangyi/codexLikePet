@@ -61,6 +61,10 @@ QString Localization::text(TextKey key) const
     case TextKey::InputPermissionBody: return zh ? QStringLiteral("Potato 只统计按键活动时间，不读取或保存按键内容。请在系统设置中允许输入监控后重新开启此选项。") : QStringLiteral("Potato records activity timing only and never reads or stores key contents. Allow Input Monitoring in System Settings, then enable this option again.");
     case TextKey::OpenSystemSettings: return zh ? QStringLiteral("打开系统设置") : QStringLiteral("Open System Settings");
     case TextKey::LoginItemErrorTitle: return zh ? QStringLiteral("无法更新登录项") : QStringLiteral("Unable to update login item");
+    case TextKey::PreviewVariant: return zh ? QStringLiteral("预览图集") : QStringLiteral("Preview atlas");
+    case TextKey::PreviewAnimation: return zh ? QStringLiteral("预览动作") : QStringLiteral("Preview animation");
+    case TextKey::PreviewClip: return zh ? QStringLiteral("扩展动画条") : QStringLiteral("Extension clip");
+    case TextKey::ResourceFallbacks: return zh ? QStringLiteral("资源与回退") : QStringLiteral("Resources and fallbacks");
     }
     return {};
 }

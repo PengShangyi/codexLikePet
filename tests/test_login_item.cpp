@@ -46,6 +46,16 @@ private slots:
         QCOMPARE(failure.count(), 1);
         QCOMPARE(controller.calls, QVector<bool>({true, false, true}));
     }
+
+    void startupReconcilesAStaleDisabledLoginItem()
+    {
+        QTemporaryDir temp;
+        AppSettings settings(temp.filePath(QStringLiteral("settings.ini")));
+        FakeLoginItemController controller;
+        LoginItemCoordinator coordinator(&settings, &controller);
+        coordinator.initialize();
+        QCOMPARE(controller.calls, QVector<bool>({false}));
+    }
 };
 
 QTEST_GUILESS_MAIN(LoginItemTest)

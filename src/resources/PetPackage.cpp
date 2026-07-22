@@ -15,7 +15,9 @@ QStringList PackageValidationResult::errorMessages() const
     QStringList messages;
     for (const PackageIssue &issue : issues) {
         if (issue.severity == PackageIssueSeverity::Error) {
-            messages.append(issue.message);
+            messages.append(issue.path.isEmpty()
+                                ? issue.message
+                                : QStringLiteral("%1: %2").arg(issue.path, issue.message));
         }
     }
     return messages;

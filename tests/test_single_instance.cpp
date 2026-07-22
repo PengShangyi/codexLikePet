@@ -11,7 +11,11 @@ class SingleInstanceTest final : public QObject
 private slots:
     void forwardsMessagesToThePrimaryInstance()
     {
-        const QString name = QStringLiteral("potato-test-%1").arg(QUuid::createUuid().toString());
+        // QLocalServer appends this to macOS' already-long per-user temporary
+        // directory. Keep the random suffix short enough for sockaddr_un.
+        const QString suffix = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
+        const QString name = QStringLiteral("potato-test-%1").arg(suffix);
+        QVERIFY(name.size() <= 32);
         SingleInstance primary(name);
         QVERIFY(primary.acquire());
         QVERIFY(primary.isPrimary());

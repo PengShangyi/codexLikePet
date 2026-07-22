@@ -1,6 +1,8 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
+#include <QVector>
 
 class InputActivitySource;
 class QTimer;
@@ -16,6 +18,8 @@ public:
 
     bool isTyping() const;
     int inactivityTimeoutMs() const;
+    qint64 lastActivityMonotonicMs() const;
+    int recentActivityCount() const;
     void reset();
 
 signals:
@@ -26,5 +30,7 @@ private:
 
     InputActivitySource *m_source;
     QTimer *m_inactivityTimer;
+    QElapsedTimer m_monotonicClock;
+    QVector<qint64> m_activityTimes;
     bool m_typing = false;
 };

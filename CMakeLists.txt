@@ -14,6 +14,7 @@ FetchContent_Declare(miniz
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(miniz)
+set_property(TARGET miniz PROPERTY SYSTEM TRUE)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,14 +22,19 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
-set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Potato only supports Apple Silicon")
-set(CMAKE_OSX_DEPLOYMENT_TARGET 12.0 CACHE STRING "Minimum supported macOS version")
+set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Potato only supports Apple Silicon" FORCE)
+set(CMAKE_OSX_DEPLOYMENT_TARGET 12.0 CACHE STRING "Minimum supported macOS version" FORCE)
 
 if(DEFINED ENV{POTATO_QT_ROOT} AND NOT "$ENV{POTATO_QT_ROOT}" STREQUAL "")
     list(PREPEND CMAKE_PREFIX_PATH "$ENV{POTATO_QT_ROOT}")
 endif()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network Test)
+option(POTATO_REQUIRE_EXACT_QT "Require the release-pinned Qt 6.8.8" OFF)
+if(POTATO_REQUIRE_EXACT_QT)
+    find_package(Qt6 6.8.8 EXACT REQUIRED COMPONENTS Core Gui Widgets Network Test)
+else()
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network Test)
+endif()
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -48,6 +54,8 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/pet/PetWindow.h
     src/pet/AnimationPlayer.cpp
     src/pet/AnimationPlayer.h
+    src/pet/AnimationClip.cpp
+    src/pet/AnimationClip.h
     src/pet/BehaviorController.cpp
     src/pet/BehaviorController.h
     src/pet/AtlasCache.cpp
@@ -100,6 +108,7 @@ qt_add_executable(Potato MACOSX_BUNDLE
 )
 
 target_include_directories(Potato PRIVATE src)
+target_compile_options(Potato PRIVATE -Wall -Wextra -Wpedantic)
 
 target_link_libraries(Potato PRIVATE
     Qt6::Core
@@ -116,6 +125,7 @@ add_executable(PotatoLoginHelper MACOSX_BUNDLE
     src/login/LoginHelperMain.mm
 )
 target_link_libraries(PotatoLoginHelper PRIVATE "-framework AppKit")
+target_compile_options(PotatoLoginHelper PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(PotatoLoginHelper PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "PotatoLoginHelper"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.peng.potato.login-helper"
@@ -137,14 +147,35 @@ add_custom_command(TARGET Potato POST_BUILD
 add_custom_command(TARGET Potato POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Skills"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/hatch-pet"
-            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Skills/hatch-pet"
+    COMMAND ${CMAKE_COMMAND}
+            "-DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/third_party/hatch-pet"
+            "-DDESTINATION=$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Skills/hatch-pet"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyHatchPet.cmake"
     COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Documentation"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/docs/PET_AUTHORING.md"
             "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Documentation/PET_AUTHORING.md"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Pets"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Pets"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/Pets"
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Pets"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Licenses/miniz"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz/LICENSE"
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Licenses/miniz/LICENSE"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Licenses/hatch-pet"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/hatch-pet/LICENSE.txt"
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/Licenses/hatch-pet/LICENSE.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+            "$<TARGET_BUNDLE_DIR:Potato>/Contents/Resources/THIRD_PARTY_NOTICES.md"
     VERBATIM
 )
 

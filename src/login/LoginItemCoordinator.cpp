@@ -15,7 +15,7 @@ LoginItemCoordinator::LoginItemCoordinator(AppSettings *settings,
 
 void LoginItemCoordinator::initialize()
 {
-    if (m_settings->launchAtLogin()) apply(true);
+    apply(m_settings->launchAtLogin());
 }
 
 void LoginItemCoordinator::apply(bool enabled)

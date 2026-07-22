@@ -72,3 +72,18 @@ QString EnvironmentResolver::atlasRelativePath(const PetPackage &package, const 
     }
     return package.spriteSheetPath;
 }
+
+std::optional<ClipDefinition> EnvironmentResolver::clipDefinition(const PetPackage &package,
+                                                                  const VariantKey &key,
+                                                                  const QString &name)
+{
+    for (const QString &candidate : key.fallbackNames()) {
+        const auto variant = package.variantClips.constFind(candidate);
+        if (variant == package.variantClips.cend()) continue;
+        const auto clip = variant->constFind(name);
+        if (clip != variant->cend()) return *clip;
+    }
+    const auto base = package.clips.constFind(name);
+    if (base != package.clips.cend()) return *base;
+    return std::nullopt;
+}

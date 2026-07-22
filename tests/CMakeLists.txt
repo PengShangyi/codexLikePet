@@ -29,6 +29,10 @@ add_test(NAME potato_window_placement_test COMMAND potato_window_placement_test)
 
 qt_add_executable(potato_atlas_test
     test_atlas.cpp
+    ../src/pet/AnimationClip.cpp
+    ../src/pet/AnimationClip.h
+    ../src/pet/AnimationPlayer.cpp
+    ../src/pet/AnimationPlayer.h
     ../src/pet/PetAtlas.cpp
     ../src/pet/PetAtlas.h
     ../src/pet/AtlasCache.cpp
@@ -96,6 +100,25 @@ qt_add_executable(potato_settings_test
 target_include_directories(potato_settings_test PRIVATE ../src)
 target_link_libraries(potato_settings_test PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME potato_settings_test COMMAND potato_settings_test)
+
+qt_add_executable(potato_settings_window_test
+    test_settings_window.cpp
+    ../src/settings/AppSettings.cpp
+    ../src/settings/AppSettings.h
+    ../src/settings/Localization.cpp
+    ../src/settings/Localization.h
+    ../src/settings/SettingsWindow.cpp
+    ../src/settings/SettingsWindow.h
+    ../src/settings/PetPreviewWidget.cpp
+    ../src/settings/PetPreviewWidget.h
+    ../src/pet/AnimationClip.cpp
+    ../src/pet/AnimationClip.h
+    ../src/pet/PetAtlas.cpp
+    ../src/pet/PetAtlas.h
+)
+target_include_directories(potato_settings_window_test PRIVATE ../src)
+target_link_libraries(potato_settings_window_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+add_test(NAME potato_settings_window_test COMMAND potato_settings_window_test)
 
 qt_add_executable(potato_library_test
     test_library.cpp

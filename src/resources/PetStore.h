@@ -3,11 +3,12 @@
 #include "resources/PetPackage.h"
 
 #include <QString>
+#include <functional>
 
 class PetStore final
 {
 public:
-    explicit PetStore(QString petsRoot = {});
+    explicit PetStore(QString petsRoot = {}, std::function<bool()> activationGate = {});
 
     QString petsRoot() const;
     bool install(const PackageValidationResult &validation,
@@ -21,4 +22,5 @@ private:
     static bool copyDirectory(const QString &source, const QString &destination, QString *error);
 
     QString m_petsRoot;
+    std::function<bool()> m_activationGate;
 };

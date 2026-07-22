@@ -122,6 +122,10 @@ bool PetAtlas::validateV2Occupancy(QString *error) const
                 }
             }
 
+            // Hatch Pet's extended v2 layout may place a dedicated neutral/front
+            // still in row 0, column 6. The slot is optional and is not part of
+            // the six-frame idle loop; row 0, column 7 remains unused.
+            if (row == 0 && column == 6) continue;
             const bool shouldBeUsed = column < usedColumns;
             if (shouldBeUsed != hasVisiblePixel) {
                 if (error) {

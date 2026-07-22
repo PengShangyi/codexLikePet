@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QObject>
+#include <QHash>
 #include <QSharedPointer>
+#include <QUuid>
 #include <optional>
 
 #include "pet/BehaviorController.h"
@@ -10,6 +12,7 @@
 class QAction;
 class QMenu;
 class QSystemTrayIcon;
+class QTimer;
 class PetWindow;
 class AppSettings;
 class Localization;
@@ -18,6 +21,7 @@ class PetLibrary;
 class PetPackageImporter;
 class AtlasCache;
 class AnimationPlayer;
+class AnimationClip;
 class PetAtlas;
 class BehaviorController;
 class QuoteProvider;
@@ -31,12 +35,17 @@ class MotionController;
 class LoginItemController;
 class LoginItemCoordinator;
 
+enum class AppRunMode {
+    Normal,
+    RuntimeCheck,
+};
+
 class AppController final : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit AppController(QObject *parent = nullptr);
+    explicit AppController(AppRunMode mode = AppRunMode::Normal, QObject *parent = nullptr);
     ~AppController() override;
 
     bool start();
@@ -49,6 +58,7 @@ signals:
 private:
     void setPetVisible(bool visible);
     void updateVisibilityAction();
+    void updatePetMenu(const QString &selectedId);
     void refreshPetLibrary();
     void selectPet(const QString &id);
     void importPet(bool directory);
@@ -57,11 +67,17 @@ private:
     void handlePetClick();
     void setTypingMonitoringEnabled(bool enabled);
     void loadCurrentVariant();
+    void configurePetPreview();
+    void loadPreviewAtlas(const QString &relativePath);
+    void loadPreviewClip(const QString &key);
+    QSharedPointer<AnimationClip> loadClip(const QString &name);
+    bool playClip(const QString &name, bool restart = true);
     void handleSystemSleep();
     void handleSystemWake();
 
     QSystemTrayIcon *m_trayIcon;
     QMenu *m_menu;
+    QMenu *m_petMenu;
     QAction *m_visibilityAction;
     QAction *m_settingsAction;
     QAction *m_quitAction;
@@ -74,6 +90,7 @@ private:
     AtlasCache *m_atlasCache;
     AnimationPlayer *m_animationPlayer;
     QSharedPointer<PetAtlas> m_currentAtlas;
+    QHash<QString, QSharedPointer<AnimationClip>> m_clipCache;
     BehaviorController *m_behavior;
     QuoteProvider *m_quoteProvider;
     SpeechBubble *m_speechBubble;
@@ -86,6 +103,9 @@ private:
     MotionController *m_motionController;
     LoginItemController *m_loginItemController;
     LoginItemCoordinator *m_loginItemCoordinator;
+    QTimer *m_clickCompletionTimer;
+    bool m_suppressSystemMutations = false;
     bool m_sleeping = false;
     bool m_petVisible = true;
+    QUuid m_activeQuoteRequest;
 };

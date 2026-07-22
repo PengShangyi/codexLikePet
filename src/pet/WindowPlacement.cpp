@@ -65,4 +65,12 @@ HorizontalDragDirection horizontalDirectionForDelta(int deltaX, int minimumDelta
     if (deltaX <= -minimumDelta) return HorizontalDragDirection::Left;
     return HorizontalDragDirection::None;
 }
+
+bool exceedsDragThreshold(const QPoint &delta, int threshold)
+{
+    const qint64 x = delta.x();
+    const qint64 y = delta.y();
+    const qint64 limit = std::max(0, threshold);
+    return x * x + y * y >= limit * limit;
+}
 }

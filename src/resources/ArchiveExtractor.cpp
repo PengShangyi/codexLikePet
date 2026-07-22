@@ -3,10 +3,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSet>
 
 #include <miniz.h>
 
 #include <sys/stat.h>
+
+#include <algorithm>
 
 namespace {
 class ZipReader final
@@ -57,6 +60,7 @@ bool ArchiveExtractor::extractPotatoPackage(const QString &archivePath,
     }
 
     qint64 expandedBytes = 0;
+    QSet<QString> extractedPaths;
     for (mz_uint index = 0; index < entryCount; ++index) {
         mz_zip_archive_file_stat stat{};
         if (!mz_zip_reader_file_stat(&reader.archive, index, &stat)) {
@@ -69,6 +73,13 @@ bool ArchiveExtractor::extractPotatoPackage(const QString &archivePath,
             *error = QStringLiteral("Unsafe archive path: %1").arg(entryName);
             return false;
         }
+        const QString collisionKey = relativePath.normalized(QString::NormalizationForm_C)
+                                         .toCaseFolded();
+        if (extractedPaths.contains(collisionKey)) {
+            *error = QStringLiteral("Duplicate archive path: %1").arg(entryName);
+            return false;
+        }
+        extractedPaths.insert(collisionKey);
 
         const mode_t mode = static_cast<mode_t>(stat.m_external_attr >> 16);
         if ((mode & S_IFMT) == S_IFLNK) {
@@ -93,11 +104,13 @@ bool ArchiveExtractor::extractPotatoPackage(const QString &archivePath,
             return false;
         }
 
-        expandedBytes += static_cast<qint64>(stat.m_uncomp_size);
-        if (expandedBytes > MaximumExpandedBytes) {
+        const quint64 entryBytes = static_cast<quint64>(stat.m_uncomp_size);
+        if (entryBytes > static_cast<quint64>(MaximumExpandedBytes)
+            || expandedBytes > MaximumExpandedBytes - static_cast<qint64>(entryBytes)) {
             *error = QStringLiteral("Archive expands beyond 512MiB");
             return false;
         }
+        expandedBytes += static_cast<qint64>(entryBytes);
         if (!QDir().mkpath(QFileInfo(outputPath).absolutePath())) {
             *error = QStringLiteral("Unable to create archive parent directory");
             return false;
@@ -116,8 +129,17 @@ bool ArchiveExtractor::extractPotatoPackage(const QString &archivePath,
 
 bool ArchiveExtractor::isSafeEntryName(const QString &entryName, QString *cleanPath)
 {
+    const bool hasControlCharacter = std::any_of(entryName.cbegin(),
+                                                  entryName.cend(),
+                                                  [](QChar character) {
+                                                      const ushort value = character.unicode();
+                                                      return value < 0x20 || value == 0x7f;
+                                                  });
     if (entryName.isEmpty() || entryName.contains(QChar::Null)
-        || entryName.contains(QLatin1Char('\\')) || QDir::isAbsolutePath(entryName)) {
+        || hasControlCharacter || entryName.contains(QLatin1Char('\\'))
+        || QDir::isAbsolutePath(entryName)
+        || (entryName.size() >= 2 && entryName.at(0).isLetter()
+            && entryName.at(1) == QLatin1Char(':'))) {
         return false;
     }
     const QString cleaned = QDir::cleanPath(entryName);

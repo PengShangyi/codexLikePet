@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QDate>
 #include <QTime>
+#include <optional>
 
 class AppSettings;
 class EnvironmentClock;
@@ -31,6 +32,9 @@ public:
                                   const QTime &dayStart,
                                   const QTime &nightStart);
     static QString atlasRelativePath(const PetPackage &package, const VariantKey &key);
+    static std::optional<ClipDefinition> clipDefinition(const PetPackage &package,
+                                                        const VariantKey &key,
+                                                        const QString &name);
 
 signals:
     void environmentChanged(const VariantKey &key);

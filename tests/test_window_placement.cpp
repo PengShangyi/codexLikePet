@@ -46,6 +46,14 @@ private slots:
         QCOMPARE(WindowPlacement::horizontalDirectionForDelta(3, 2), HorizontalDragDirection::Right);
         QCOMPARE(WindowPlacement::horizontalDirectionForDelta(1, 2), HorizontalDragDirection::None);
     }
+
+    void distinguishesClicksFromFourPointDragsByEuclideanDistance()
+    {
+        QVERIFY(!WindowPlacement::exceedsDragThreshold(QPoint(2, 2), 4));
+        QVERIFY(!WindowPlacement::exceedsDragThreshold(QPoint(3, 0), 4));
+        QVERIFY(WindowPlacement::exceedsDragThreshold(QPoint(4, 0), 4));
+        QVERIFY(WindowPlacement::exceedsDragThreshold(QPoint(3, 3), 4));
+    }
 };
 
 QTEST_GUILESS_MAIN(WindowPlacementTest)

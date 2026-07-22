@@ -3,6 +3,7 @@
 #include "pet/WindowPlacement.h"
 
 #include <QFontMetrics>
+#include <QHideEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QTimer>
@@ -17,6 +18,18 @@ SpeechBubble::SpeechBubble(QWidget *parent)
     setAttribute(Qt::WA_ShowWithoutActivating);
     m_hideTimer->setSingleShot(true);
     connect(m_hideTimer, &QTimer::timeout, this, &QWidget::hide);
+}
+
+void SpeechBubble::setAlwaysOnTop(bool enabled)
+{
+    if (windowFlags().testFlag(Qt::WindowStaysOnTopHint) == enabled) return;
+    const bool wasVisible = isVisible();
+    const int remainingTime = m_hideTimer->remainingTime();
+    setWindowFlag(Qt::WindowStaysOnTopHint, enabled);
+    if (wasVisible) {
+        show();
+        m_hideTimer->start(remainingTime > 0 ? remainingTime : 3000);
+    }
 }
 
 void SpeechBubble::showMessage(const QString &text,
@@ -66,4 +79,10 @@ void SpeechBubble::paintEvent(QPaintEvent *)
     painter.drawText(rect().adjusted(16, 10, -16, -10),
                      Qt::TextWordWrap | Qt::AlignCenter,
                      m_text);
+}
+
+void SpeechBubble::hideEvent(QHideEvent *event)
+{
+    m_hideTimer->stop();
+    QWidget::hideEvent(event);
 }

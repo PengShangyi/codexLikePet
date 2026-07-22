@@ -1,7 +1,10 @@
 #include "pet/AtlasCache.h"
+#include "pet/AnimationClip.h"
+#include "pet/AnimationPlayer.h"
 #include "pet/PetAtlas.h"
 
 #include <QTemporaryDir>
+#include <QSignalSpy>
 #include <QTest>
 
 class AtlasTest final : public QObject
@@ -71,6 +74,53 @@ private slots:
         QVERIFY(cache.contains(first));
         QVERIFY(!cache.contains(second));
         QVERIFY(cache.contains(third));
+    }
+
+    void loadsAndPlaysAnExtensionClip()
+    {
+        const QString path = m_temp.filePath(QStringLiteral("clip.png"));
+        QImage strip(PetAtlas::CellWidth * 2,
+                     PetAtlas::CellHeight,
+                     QImage::Format_RGBA8888);
+        strip.fill(QColor(20, 40, 60, 180));
+        QVERIFY(strip.save(path));
+
+        auto clip = QSharedPointer<AnimationClip>::create();
+        QVERIFY(clip->load(path, {50, 50}));
+        QCOMPARE(clip->frameCount(), 2);
+        QCOMPARE(clip->frame(1).size(), QSize(192, 208));
+
+        AnimationPlayer player;
+        QSignalSpy frameSpy(&player, &AnimationPlayer::frameReady);
+        QSignalSpy loopSpy(&player, &AnimationPlayer::clipLoopCompleted);
+        player.setSpeedFactor(2.0);
+        player.setClip(clip, QStringLiteral("click"));
+        player.start();
+        QTRY_VERIFY_WITH_TIMEOUT(loopSpy.count() >= 1, 250);
+        QVERIFY(frameSpy.count() >= 3);
+        QCOMPARE(loopSpy.first().at(0).toString(), QStringLiteral("click"));
+        player.stop();
+    }
+
+    void reducedMotionKeepsAnExtensionClipOnItsRepresentativeFrame()
+    {
+        const QString path = m_temp.filePath(QStringLiteral("reduced-clip.png"));
+        QImage strip(PetAtlas::CellWidth,
+                     PetAtlas::CellHeight,
+                     QImage::Format_RGBA8888);
+        strip.fill(QColor(80, 60, 40, 180));
+        QVERIFY(strip.save(path));
+        auto clip = QSharedPointer<AnimationClip>::create();
+        QVERIFY(clip->load(path, {50}));
+
+        AnimationPlayer player;
+        QSignalSpy loopSpy(&player, &AnimationPlayer::clipLoopCompleted);
+        player.setClip(clip, QStringLiteral("typing"));
+        player.setReducedMotion(true);
+        player.start();
+        QTest::qWait(80);
+        QCOMPARE(loopSpy.count(), 0);
+        QVERIFY(!player.isRunning());
     }
 
 private:

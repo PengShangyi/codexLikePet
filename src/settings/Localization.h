@@ -14,6 +14,7 @@ enum class TextKey {
     ValidationReport,
     InputPermissionTitle, InputPermissionBody, OpenSystemSettings,
     LoginItemErrorTitle,
+    PreviewVariant, PreviewAnimation, PreviewClip, ResourceFallbacks,
 };
 
 class Localization final : public QObject

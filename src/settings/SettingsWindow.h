@@ -17,6 +17,7 @@ class QTabWidget;
 class QTimeEdit;
 class QPlainTextEdit;
 class PetPreviewWidget;
+class AnimationClip;
 struct PetRecord;
 
 class SettingsWindow final : public QWidget
@@ -29,6 +30,12 @@ public:
     void setPets(const QVector<PetRecord> &pets, const QString &selectedId);
     QString selectedPetId() const;
     void setPreviewAtlas(QSharedPointer<PetAtlas> atlas, bool smoothRendering);
+    void setPreviewOptions(const QStringList &labels,
+                           const QStringList &paths,
+                           const QString &selectedPath);
+    void setPreviewClipOptions(const QStringList &labels, const QStringList &keys);
+    void setPreviewClip(QSharedPointer<AnimationClip> clip, bool smoothRendering);
+    void setResourceSummary(const QString &summary);
     void setValidationReport(const QString &report, bool error);
     void setReducedMotion(bool reduced);
 
@@ -38,11 +45,14 @@ signals:
     void importDirectoryRequested();
     void removePetRequested();
     void petSelected(const QString &id);
+    void previewAtlasSelected(const QString &relativePath);
+    void previewClipSelected(const QString &key);
 
 private:
     void buildUi();
     void bindSettings();
     void retranslate();
+    void updateSliderLabels();
 
     AppSettings *m_settings;
     Localization *m_localization;
@@ -50,11 +60,20 @@ private:
     QWidget *m_petTab;
     QWidget *m_generalTab;
     QFormLayout *m_generalForm;
+    QFormLayout *m_previewForm;
     QComboBox *m_petCombo;
+    QComboBox *m_previewAtlasCombo;
+    QComboBox *m_previewStateCombo;
+    QComboBox *m_previewClipCombo;
+    QLabel *m_previewAtlasLabel;
+    QLabel *m_previewStateLabel;
+    QLabel *m_previewClipLabel;
     QPushButton *m_importButton;
     QPushButton *m_removeButton;
     PetPreviewWidget *m_preview;
     QPlainTextEdit *m_report;
+    QPlainTextEdit *m_resourceSummary;
+    QLabel *m_resourceSummaryLabel;
     QSlider *m_scaleSlider;
     QSlider *m_speedSlider;
     QCheckBox *m_topCheck;

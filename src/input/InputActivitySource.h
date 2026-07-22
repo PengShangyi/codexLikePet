@@ -23,6 +23,7 @@ public:
 signals:
     // Intentionally carries no event, character, scan code, modifier, or app.
     void activityDetected();
+    void monitoringInvalidated();
 };
 
 Q_DECLARE_METATYPE(InputStartResult)

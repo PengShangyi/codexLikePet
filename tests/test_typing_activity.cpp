@@ -13,6 +13,7 @@ public:
     void stop() override { m_active = false; }
     bool isActive() const override { return m_active; }
     void simulateActivity() { emit activityDetected(); }
+    void simulateInvalidation() { m_active = false; emit monitoringInvalidated(); }
 private:
     bool m_active = false;
 };
@@ -29,8 +30,11 @@ private slots:
         QSignalSpy spy(&detector, &TypingActivityDetector::typingChanged);
         source.simulateActivity();
         QVERIFY(detector.isTyping());
+        QVERIFY(detector.lastActivityMonotonicMs() >= 0);
+        QCOMPARE(detector.recentActivityCount(), 1);
         QCOMPARE(spy.count(), 1);
         source.simulateActivity();
+        QCOMPARE(detector.recentActivityCount(), 2);
         QCOMPARE(spy.count(), 1);
         QTRY_VERIFY_WITH_TIMEOUT(!detector.isTyping(), 150);
         QCOMPARE(spy.count(), 2);
@@ -44,6 +48,19 @@ private slots:
         source.simulateActivity();
         detector.reset();
         QVERIFY(!detector.isTyping());
+        QCOMPARE(detector.lastActivityMonotonicMs(), -1);
+        QCOMPARE(detector.recentActivityCount(), 0);
+    }
+
+    void invalidationImmediatelyEndsTypingWithoutAnEventPayload()
+    {
+        FakeInputActivitySource source;
+        TypingActivityDetector detector(&source, 1000);
+        source.simulateActivity();
+        QVERIFY(detector.isTyping());
+        source.simulateInvalidation();
+        QVERIFY(!detector.isTyping());
+        QVERIFY(!source.isActive());
     }
 };
 

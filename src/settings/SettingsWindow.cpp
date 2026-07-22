@@ -20,13 +20,15 @@
 #include <QTimeEdit>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 SettingsWindow::SettingsWindow(AppSettings *settings, Localization *localization, QWidget *parent)
     : QWidget(parent, Qt::Window)
     , m_settings(settings)
     , m_localization(localization)
 {
     setAttribute(Qt::WA_QuitOnClose, false);
-    setMinimumSize(520, 470);
+    setMinimumSize(600, 650);
     buildUi();
     bindSettings();
     retranslate();
@@ -57,8 +59,25 @@ void SettingsWindow::buildUi()
     petButtons->addWidget(m_removeButton);
     petButtons->addStretch();
     petLayout->addLayout(petButtons);
+    m_previewForm = new QFormLayout;
+    m_previewAtlasLabel = new QLabel(m_petTab);
+    m_previewStateLabel = new QLabel(m_petTab);
+    m_previewClipLabel = new QLabel(m_petTab);
+    m_previewAtlasCombo = new QComboBox(m_petTab);
+    m_previewStateCombo = new QComboBox(m_petTab);
+    m_previewClipCombo = new QComboBox(m_petTab);
+    m_previewForm->addRow(m_previewAtlasLabel, m_previewAtlasCombo);
+    m_previewForm->addRow(m_previewStateLabel, m_previewStateCombo);
+    m_previewForm->addRow(m_previewClipLabel, m_previewClipCombo);
+    petLayout->addLayout(m_previewForm);
     m_preview = new PetPreviewWidget(m_petTab);
     petLayout->addWidget(m_preview, 1);
+    m_resourceSummaryLabel = new QLabel(m_petTab);
+    petLayout->addWidget(m_resourceSummaryLabel);
+    m_resourceSummary = new QPlainTextEdit(m_petTab);
+    m_resourceSummary->setReadOnly(true);
+    m_resourceSummary->setMaximumHeight(105);
+    petLayout->addWidget(m_resourceSummary);
     m_report = new QPlainTextEdit(m_petTab);
     m_report->setReadOnly(true);
     m_report->setMaximumBlockCount(200);
@@ -85,17 +104,17 @@ void SettingsWindow::buildUi()
     m_nightStart->setDisplayFormat(QStringLiteral("HH:mm"));
     m_languageCombo = new QComboBox(m_generalTab);
     m_resetButton = new QPushButton(m_generalTab);
-    m_generalForm->addRow(QString(), m_scaleSlider);
-    m_generalForm->addRow(QString(), m_speedSlider);
+    m_generalForm->addRow(QStringLiteral(" "), m_scaleSlider);
+    m_generalForm->addRow(QStringLiteral(" "), m_speedSlider);
     m_generalForm->addRow(m_topCheck);
     m_generalForm->addRow(m_loginCheck);
     m_generalForm->addRow(m_typingCheck);
-    m_generalForm->addRow(QString(), m_typingNote);
-    m_generalForm->addRow(QString(), m_motionCombo);
-    m_generalForm->addRow(QString(), m_hemisphereCombo);
-    m_generalForm->addRow(QString(), m_dayStart);
-    m_generalForm->addRow(QString(), m_nightStart);
-    m_generalForm->addRow(QString(), m_languageCombo);
+    m_generalForm->addRow(QStringLiteral(" "), m_typingNote);
+    m_generalForm->addRow(QStringLiteral(" "), m_motionCombo);
+    m_generalForm->addRow(QStringLiteral(" "), m_hemisphereCombo);
+    m_generalForm->addRow(QStringLiteral(" "), m_dayStart);
+    m_generalForm->addRow(QStringLiteral(" "), m_nightStart);
+    m_generalForm->addRow(QStringLiteral(" "), m_languageCombo);
     m_generalForm->addRow(m_resetButton);
     m_tabs->addTab(m_generalTab, QString());
 
@@ -116,8 +135,14 @@ void SettingsWindow::bindSettings()
     m_nightStart->setTime(m_settings->nightStartsAt());
     m_languageCombo->setCurrentIndex(static_cast<int>(m_settings->language()));
 
-    connect(m_scaleSlider, &QSlider::valueChanged, this, [this](int value) { m_settings->setScale(value / 100.0); });
-    connect(m_speedSlider, &QSlider::valueChanged, this, [this](int value) { m_settings->setAnimationSpeed(value / 100.0); });
+    connect(m_scaleSlider, &QSlider::valueChanged, this, [this](int value) {
+        m_settings->setScale(value / 100.0);
+        updateSliderLabels();
+    });
+    connect(m_speedSlider, &QSlider::valueChanged, this, [this](int value) {
+        m_settings->setAnimationSpeed(value / 100.0);
+        updateSliderLabels();
+    });
     connect(m_topCheck, &QCheckBox::toggled, m_settings, &AppSettings::setAlwaysOnTop);
     connect(m_loginCheck, &QCheckBox::toggled, m_settings, &AppSettings::setLaunchAtLogin);
     connect(m_typingCheck, &QCheckBox::toggled, m_settings, &AppSettings::setTypingDetectionEnabled);
@@ -144,6 +169,27 @@ void SettingsWindow::bindSettings()
         m_removeButton->setEnabled(!id.isEmpty() && !builtIn);
         if (!id.isEmpty()) emit petSelected(id);
     });
+    connect(m_previewAtlasCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index >= 0) {
+            const QSignalBlocker blocker(m_previewClipCombo);
+            m_previewClipCombo->setCurrentIndex(0);
+            emit previewAtlasSelected(m_previewAtlasCombo->itemData(index).toString());
+        }
+    });
+    connect(m_previewStateCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index >= 0) {
+            const QSignalBlocker blocker(m_previewClipCombo);
+            m_previewClipCombo->setCurrentIndex(0);
+            m_preview->setState(static_cast<V2AnimationState>(m_previewStateCombo->itemData(index).toInt()));
+        }
+    });
+    connect(m_previewClipCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index <= 0) {
+            m_preview->setState(static_cast<V2AnimationState>(m_previewStateCombo->currentData().toInt()));
+            return;
+        }
+        emit previewClipSelected(m_previewClipCombo->itemData(index).toString());
+    });
     connect(m_closeButton, &QPushButton::clicked, this, &QWidget::hide);
 }
 
@@ -162,8 +208,42 @@ void SettingsWindow::retranslate()
     if (QAction *action = m_importButton->menu()->findChild<QAction *>(QStringLiteral("importPackageAction"))) action->setText(m_localization->text(TextKey::ImportPackage));
     if (QAction *action = m_importButton->menu()->findChild<QAction *>(QStringLiteral("importDirectoryAction"))) action->setText(m_localization->text(TextKey::ImportDirectory));
     m_report->setPlaceholderText(m_localization->text(TextKey::ValidationReport));
-    static_cast<QLabel *>(m_generalForm->labelForField(m_scaleSlider))->setText(m_localization->text(TextKey::Size));
-    static_cast<QLabel *>(m_generalForm->labelForField(m_speedSlider))->setText(m_localization->text(TextKey::AnimationSpeed));
+    m_previewAtlasLabel->setText(m_localization->text(TextKey::PreviewVariant));
+    m_previewStateLabel->setText(m_localization->text(TextKey::PreviewAnimation));
+    m_previewClipLabel->setText(m_localization->text(TextKey::PreviewClip));
+    if (m_previewClipCombo->count() > 0) {
+        m_previewClipCombo->setItemText(0,
+                                        m_localization->usesChinese()
+                                            ? QStringLiteral("使用标准动作")
+                                            : QStringLiteral("Use standard animation"));
+    }
+    m_previewAtlasCombo->setToolTip(m_localization->text(TextKey::PreviewVariant));
+    m_previewStateCombo->setToolTip(m_localization->text(TextKey::PreviewAnimation));
+    m_resourceSummary->setPlaceholderText(m_localization->text(TextKey::ResourceFallbacks));
+    m_resourceSummaryLabel->setText(m_localization->text(TextKey::ResourceFallbacks));
+
+    const QSignalBlocker stateBlocker(m_previewStateCombo);
+    const int previousState = m_previewStateCombo->currentData().toInt();
+    m_previewStateCombo->clear();
+    const bool zh = m_localization->usesChinese();
+    const QVector<QPair<V2AnimationState, QString>> states = {
+        {V2AnimationState::Idle, zh ? QStringLiteral("空闲") : QStringLiteral("Idle")},
+        {V2AnimationState::RunningRight, zh ? QStringLiteral("向右奔跑") : QStringLiteral("Running right")},
+        {V2AnimationState::RunningLeft, zh ? QStringLiteral("向左奔跑") : QStringLiteral("Running left")},
+        {V2AnimationState::Waving, zh ? QStringLiteral("挥手") : QStringLiteral("Waving")},
+        {V2AnimationState::Jumping, zh ? QStringLiteral("跳跃") : QStringLiteral("Jumping")},
+        {V2AnimationState::Failed, zh ? QStringLiteral("失败") : QStringLiteral("Failed")},
+        {V2AnimationState::Waiting, zh ? QStringLiteral("等待") : QStringLiteral("Waiting")},
+        {V2AnimationState::Running, zh ? QStringLiteral("工作") : QStringLiteral("Working")},
+        {V2AnimationState::Review, zh ? QStringLiteral("检查") : QStringLiteral("Review")},
+    };
+    int selectedStateIndex = 0;
+    for (const auto &[state, label] : states) {
+        m_previewStateCombo->addItem(label, static_cast<int>(state));
+        if (static_cast<int>(state) == previousState) selectedStateIndex = m_previewStateCombo->count() - 1;
+    }
+    m_previewStateCombo->setCurrentIndex(selectedStateIndex);
+    updateSliderLabels();
     m_topCheck->setText(m_localization->text(TextKey::AlwaysOnTop));
     m_loginCheck->setText(m_localization->text(TextKey::LaunchAtLogin));
     m_typingCheck->setText(m_localization->text(TextKey::TypingDetection));
@@ -227,6 +307,48 @@ void SettingsWindow::setPreviewAtlas(QSharedPointer<PetAtlas> atlas, bool smooth
     else m_preview->clear();
 }
 
+void SettingsWindow::setPreviewOptions(const QStringList &labels,
+                                       const QStringList &paths,
+                                       const QString &selectedPath)
+{
+    const QSignalBlocker blocker(m_previewAtlasCombo);
+    m_previewAtlasCombo->clear();
+    const int count = std::min(labels.size(), paths.size());
+    int selectedIndex = 0;
+    for (int index = 0; index < count; ++index) {
+        m_previewAtlasCombo->addItem(labels.at(index), paths.at(index));
+        if (paths.at(index) == selectedPath) selectedIndex = index;
+    }
+    m_previewAtlasCombo->setEnabled(count > 0);
+    if (count > 0) m_previewAtlasCombo->setCurrentIndex(selectedIndex);
+}
+
+void SettingsWindow::setPreviewClipOptions(const QStringList &labels, const QStringList &keys)
+{
+    const QSignalBlocker blocker(m_previewClipCombo);
+    m_previewClipCombo->clear();
+    m_previewClipCombo->addItem(m_localization->usesChinese()
+                                    ? QStringLiteral("使用标准动作")
+                                    : QStringLiteral("Use standard animation"),
+                                QString());
+    const int count = std::min(labels.size(), keys.size());
+    for (int index = 0; index < count; ++index) {
+        m_previewClipCombo->addItem(labels.at(index), keys.at(index));
+    }
+    m_previewClipCombo->setEnabled(count > 0);
+    m_previewClipCombo->setCurrentIndex(0);
+}
+
+void SettingsWindow::setPreviewClip(QSharedPointer<AnimationClip> clip, bool smoothRendering)
+{
+    if (clip) m_preview->setClip(std::move(clip), smoothRendering);
+}
+
+void SettingsWindow::setResourceSummary(const QString &summary)
+{
+    m_resourceSummary->setPlainText(summary);
+}
+
 void SettingsWindow::setValidationReport(const QString &report, bool error)
 {
     m_report->setVisible(!report.isEmpty());
@@ -237,4 +359,16 @@ void SettingsWindow::setValidationReport(const QString &report, bool error)
 void SettingsWindow::setReducedMotion(bool reduced)
 {
     m_preview->setReducedMotion(reduced);
+}
+
+void SettingsWindow::updateSliderLabels()
+{
+    static_cast<QLabel *>(m_generalForm->labelForField(m_scaleSlider))
+        ->setText(QStringLiteral("%1 — %2%")
+                      .arg(m_localization->text(TextKey::Size))
+                      .arg(m_scaleSlider->value()));
+    static_cast<QLabel *>(m_generalForm->labelForField(m_speedSlider))
+        ->setText(QStringLiteral("%1 — %2×")
+                      .arg(m_localization->text(TextKey::AnimationSpeed))
+                      .arg(m_speedSlider->value() / 100.0, 0, 'f', 2));
 }
