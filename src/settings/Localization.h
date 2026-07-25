@@ -15,6 +15,14 @@ enum class TextKey {
     InputPermissionTitle, InputPermissionBody, OpenSystemSettings,
     LoginItemErrorTitle,
     PreviewVariant, PreviewAnimation, PreviewClip, ResourceFallbacks,
+    OnboardingTitle, OnboardingIntro,
+    OnboardingMenuBarHeading, OnboardingMenuBarBody,
+    OnboardingSettingsHeading, OnboardingSettingsBody,
+    OnboardingTypingHeading, OnboardingTypingBody,
+    OnboardingImportHeading, OnboardingImportBody,
+    OnboardingGetStarted,
+    AboutMenuItem, WelcomeMenuItem, AboutTagline, AboutCopyright,
+    AboutVersionLabel, AboutViewLicenses,
 };
 
 class Localization final : public QObject

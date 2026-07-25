@@ -44,6 +44,7 @@ public:
     QTime nightStartsAt() const;
     AppLanguage language() const;
     QString selectedPetId() const;
+    bool onboardingCompleted() const;
 
 public slots:
     void setScale(double value);
@@ -57,6 +58,7 @@ public slots:
     void setNightStartsAt(const QTime &value);
     void setLanguage(AppLanguage value);
     void setSelectedPetId(const QString &value);
+    void setOnboardingCompleted(bool value);
 
 signals:
     void scaleChanged(double value);

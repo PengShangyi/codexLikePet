@@ -6,6 +6,10 @@
 
 #include <unistd.h>
 
+#ifndef POTATO_VERSION
+#define POTATO_VERSION "0.0.0"
+#endif
+
 int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
@@ -16,7 +20,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName(runtimeCheck
                                              ? QStringLiteral("PotatoRuntimeCheck")
                                              : QStringLiteral("Potato"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(POTATO_VERSION));
 
     SingleInstance instance(QStringLiteral("com.peng.potato.%1").arg(getuid()));
     if (!instance.acquire()) {

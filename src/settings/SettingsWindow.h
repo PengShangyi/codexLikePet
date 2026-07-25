@@ -47,6 +47,7 @@ signals:
     void petSelected(const QString &id);
     void previewAtlasSelected(const QString &relativePath);
     void previewClipSelected(const QString &key);
+    void aboutRequested();
 
 private:
     void buildUi();
@@ -86,5 +87,6 @@ private:
     QTimeEdit *m_nightStart;
     QComboBox *m_languageCombo;
     QPushButton *m_resetButton;
+    QPushButton *m_aboutButton;
     QPushButton *m_closeButton;
 };

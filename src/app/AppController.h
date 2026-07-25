@@ -18,6 +18,8 @@ class PetWindow;
 class AppSettings;
 class Localization;
 class SettingsWindow;
+class OnboardingWindow;
+class AboutWindow;
 class PetLibrary;
 class PetPackageImporter;
 class AtlasCache;
@@ -51,6 +53,8 @@ public:
 
     bool start();
     void requestSettings();
+    void showAbout();
+    void showWelcome();
 
     // Exposed for tests: whether the idle-fidget scheduler is currently armed.
     bool isIdleFidgetArmed() const;
@@ -92,10 +96,14 @@ private:
     QMenu *m_petMenu;
     QAction *m_visibilityAction;
     QAction *m_settingsAction;
+    QAction *m_welcomeAction = nullptr;
+    QAction *m_aboutAction = nullptr;
     QAction *m_quitAction;
     AppSettings *m_settings;
     Localization *m_localization;
     SettingsWindow *m_settingsWindow;
+    OnboardingWindow *m_onboardingWindow = nullptr;
+    AboutWindow *m_aboutWindow = nullptr;
     PetWindow *m_petWindow;
     PetLibrary *m_petLibrary;
     PetPackageImporter *m_importer;

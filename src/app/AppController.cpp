@@ -5,6 +5,8 @@
 #include "settings/AppSettings.h"
 #include "settings/Localization.h"
 #include "settings/SettingsWindow.h"
+#include "settings/OnboardingWindow.h"
+#include "settings/AboutWindow.h"
 #include "pet/AnimationPlayer.h"
 #include "pet/AnimationClip.h"
 #include "pet/AtlasCache.h"
@@ -91,6 +93,8 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     , m_typingReturnTimer(new QTimer(this))
     , m_suppressSystemMutations(mode == AppRunMode::RuntimeCheck)
 {
+    m_onboardingWindow = new OnboardingWindow(m_localization);
+    m_aboutWindow = new AboutWindow(m_localization);
     m_clickCompletionTimer->setSingleShot(true);
     m_clickCompletionTimer->setInterval(500);
     connect(m_clickCompletionTimer, &QTimer::timeout, this, [this] {
@@ -115,6 +119,7 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     connect(m_settingsWindow, &SettingsWindow::removePetRequested, this, &AppController::removeSelectedPet);
     connect(m_settingsWindow, &SettingsWindow::previewAtlasSelected, this, &AppController::loadPreviewAtlas);
     connect(m_settingsWindow, &SettingsWindow::previewClipSelected, this, &AppController::loadPreviewClip);
+    connect(m_settingsWindow, &SettingsWindow::aboutRequested, this, &AppController::showAbout);
     connect(m_animationPlayer, &AnimationPlayer::frameReady, m_petWindow, &PetWindow::setFrame);
     connect(m_settings, &AppSettings::animationSpeedChanged, m_animationPlayer, &AnimationPlayer::setSpeedFactor);
     connect(m_petWindow, &PetWindow::dragStarted, m_behavior, &BehaviorController::beginDrag);
@@ -201,6 +206,8 @@ AppController::~AppController()
     m_trayIcon->setContextMenu(nullptr);
     delete m_menu;
     delete m_settingsWindow;
+    delete m_onboardingWindow;
+    delete m_aboutWindow;
     delete m_petWindow;
     delete m_importer;
     delete m_atlasCache;
@@ -228,6 +235,12 @@ bool AppController::start()
     m_settingsAction = m_menu->addAction(QString());
     connect(m_settingsAction, &QAction::triggered, this, &AppController::requestSettings);
 
+    m_welcomeAction = m_menu->addAction(QString());
+    connect(m_welcomeAction, &QAction::triggered, this, &AppController::showWelcome);
+
+    m_aboutAction = m_menu->addAction(QString());
+    connect(m_aboutAction, &QAction::triggered, this, &AppController::showAbout);
+
     m_menu->addSeparator();
     m_quitAction = m_menu->addAction(QString());
     connect(m_quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
@@ -252,6 +265,11 @@ bool AppController::start()
     m_settingsWindow->setReducedMotion(m_motionController->reducedMotion());
     m_speechBubble->setAlwaysOnTop(m_settings->alwaysOnTop());
     if (!m_suppressSystemMutations) m_loginItemCoordinator->initialize();
+
+    if (!m_suppressSystemMutations && !m_settings->onboardingCompleted()) {
+        showWelcome();
+        m_settings->setOnboardingCompleted(true);
+    }
 
     connect(this, &AppController::petVisibilityRequested, m_petWindow, &QWidget::setVisible);
     return true;
@@ -728,6 +746,22 @@ void AppController::requestSettings()
     emit settingsRequested();
 }
 
+void AppController::showWelcome()
+{
+    MacApplication::activateIgnoringOtherApps();
+    m_onboardingWindow->show();
+    m_onboardingWindow->raise();
+    m_onboardingWindow->activateWindow();
+}
+
+void AppController::showAbout()
+{
+    MacApplication::activateIgnoringOtherApps();
+    m_aboutWindow->show();
+    m_aboutWindow->raise();
+    m_aboutWindow->activateWindow();
+}
+
 void AppController::setPetVisible(bool visible)
 {
     if (m_petVisible == visible) {
@@ -764,6 +798,8 @@ void AppController::updateVisibilityAction()
                                                   : m_localization->text(TextKey::ShowPet));
     }
     if (m_settingsAction) m_settingsAction->setText(m_localization->text(TextKey::Settings));
+    if (m_welcomeAction) m_welcomeAction->setText(m_localization->text(TextKey::WelcomeMenuItem));
+    if (m_aboutAction) m_aboutAction->setText(m_localization->text(TextKey::AboutMenuItem));
     if (m_quitAction) m_quitAction->setText(m_localization->text(TextKey::Quit));
     if (m_petMenu) m_petMenu->setTitle(m_localization->text(TextKey::Pet));
 }

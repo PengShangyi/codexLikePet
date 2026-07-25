@@ -104,6 +104,7 @@ void SettingsWindow::buildUi()
     m_nightStart->setDisplayFormat(QStringLiteral("HH:mm"));
     m_languageCombo = new QComboBox(m_generalTab);
     m_resetButton = new QPushButton(m_generalTab);
+    m_aboutButton = new QPushButton(m_generalTab);
     m_generalForm->addRow(QStringLiteral(" "), m_scaleSlider);
     m_generalForm->addRow(QStringLiteral(" "), m_speedSlider);
     m_generalForm->addRow(m_topCheck);
@@ -116,6 +117,7 @@ void SettingsWindow::buildUi()
     m_generalForm->addRow(QStringLiteral(" "), m_nightStart);
     m_generalForm->addRow(QStringLiteral(" "), m_languageCombo);
     m_generalForm->addRow(m_resetButton);
+    m_generalForm->addRow(m_aboutButton);
     m_tabs->addTab(m_generalTab, QString());
 
     m_closeButton = new QPushButton(this);
@@ -154,6 +156,7 @@ void SettingsWindow::bindSettings()
     connect(m_nightStart, &QTimeEdit::timeChanged, m_settings, &AppSettings::setNightStartsAt);
     connect(m_languageCombo, &QComboBox::currentIndexChanged, this, [this](int value) { m_settings->setLanguage(static_cast<AppLanguage>(value)); });
     connect(m_resetButton, &QPushButton::clicked, this, &SettingsWindow::resetPositionRequested);
+    connect(m_aboutButton, &QPushButton::clicked, this, &SettingsWindow::aboutRequested);
     connect(m_importButton->menu()->findChild<QAction *>(QStringLiteral("importPackageAction")),
             &QAction::triggered,
             this,
@@ -271,6 +274,7 @@ void SettingsWindow::retranslate()
     static_cast<QLabel *>(m_generalForm->labelForField(m_nightStart))->setText(m_localization->text(TextKey::NightStarts));
     static_cast<QLabel *>(m_generalForm->labelForField(m_languageCombo))->setText(m_localization->text(TextKey::Language));
     m_resetButton->setText(m_localization->text(TextKey::ResetPosition));
+    m_aboutButton->setText(m_localization->text(TextKey::AboutMenuItem));
     m_closeButton->setText(m_localization->text(TextKey::Close));
 }
 

@@ -60,10 +60,24 @@ private slots:
         QCOMPARE(settings.scale(), 1.5);
         QVERIFY(settings.typingDetectionEnabled());
         QCOMPARE(settings.dayStartsAt(), QTime(7, 0));
+        // An existing profile is treated as an upgrader: onboarding is suppressed.
+        QVERIFY(settings.onboardingCompleted());
         QSettings migrated(path, QSettings::IniFormat);
-        QCOMPARE(migrated.value(QStringLiteral("meta/schemaVersion")).toInt(), 1);
+        QCOMPARE(migrated.value(QStringLiteral("meta/schemaVersion")).toInt(), 2);
         QVERIFY(!migrated.contains(QStringLiteral("scale")));
         QVERIFY(!migrated.contains(QStringLiteral("typingDetectionEnabled")));
+    }
+
+    void freshProfileShowsOnboardingOnce()
+    {
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("settings.ini"));
+        AppSettings settings(path);
+        QVERIFY(!settings.onboardingCompleted()); // fresh install: welcome pending
+        settings.setOnboardingCompleted(true);
+        QVERIFY(settings.onboardingCompleted());
+        AppSettings restored(path);
+        QVERIFY(restored.onboardingCompleted()); // persists across launches
     }
 
     void recoversCorruptAndNonFiniteNumericValues()

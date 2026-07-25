@@ -89,6 +89,11 @@ QString AppSettings::selectedPetId() const
     return m_settings->value(QStringLiteral("pets/selectedId"), QStringLiteral("potato")).toString();
 }
 
+bool AppSettings::onboardingCompleted() const
+{
+    return m_settings->value(QStringLiteral("onboarding/welcomeShown"), false).toBool();
+}
+
 void AppSettings::setScale(double value)
 {
     value = std::isfinite(value) ? std::clamp(value, 0.5, 2.0) : 1.0;
@@ -153,24 +158,41 @@ void AppSettings::setSelectedPetId(const QString &value)
     if (!cleaned.isEmpty() && writeIfChanged(QStringLiteral("pets/selectedId"), cleaned, selectedPetId())) emit selectedPetIdChanged(cleaned);
 }
 
+void AppSettings::setOnboardingCompleted(bool value)
+{
+    m_settings->setValue(QStringLiteral("onboarding/welcomeShown"), value);
+    m_settings->sync();
+}
+
 void AppSettings::migrate()
 {
-    constexpr int currentSchemaVersion = 1;
+    constexpr int currentSchemaVersion = 2;
     const int storedVersion = m_settings->value(QStringLiteral("meta/schemaVersion"), 0).toInt();
     if (storedVersion >= currentSchemaVersion) return;
 
-    const QVector<QPair<QString, QString>> legacyKeys = {
-        {QStringLiteral("scale"), QStringLiteral("appearance/scale")},
-        {QStringLiteral("animationSpeed"), QStringLiteral("appearance/animationSpeed")},
-        {QStringLiteral("alwaysOnTop"), QStringLiteral("appearance/alwaysOnTop")},
-        {QStringLiteral("launchAtLogin"), QStringLiteral("system/launchAtLogin")},
-        {QStringLiteral("typingDetectionEnabled"), QStringLiteral("privacy/typingDetection")},
-    };
-    for (const auto &[legacy, current] : legacyKeys) {
-        if (m_settings->contains(legacy) && !m_settings->contains(current)) {
-            m_settings->setValue(current, m_settings->value(legacy));
+    // Any existing key means this profile predates the current schema, i.e. the
+    // user has run Potato before and should not be shown the first-run welcome.
+    const bool existingProfile = !m_settings->allKeys().isEmpty();
+
+    if (storedVersion < 1) {
+        const QVector<QPair<QString, QString>> legacyKeys = {
+            {QStringLiteral("scale"), QStringLiteral("appearance/scale")},
+            {QStringLiteral("animationSpeed"), QStringLiteral("appearance/animationSpeed")},
+            {QStringLiteral("alwaysOnTop"), QStringLiteral("appearance/alwaysOnTop")},
+            {QStringLiteral("launchAtLogin"), QStringLiteral("system/launchAtLogin")},
+            {QStringLiteral("typingDetectionEnabled"), QStringLiteral("privacy/typingDetection")},
+        };
+        for (const auto &[legacy, current] : legacyKeys) {
+            if (m_settings->contains(legacy) && !m_settings->contains(current)) {
+                m_settings->setValue(current, m_settings->value(legacy));
+            }
+            m_settings->remove(legacy);
         }
-        m_settings->remove(legacy);
+    }
+    // Suppress the first-run welcome for upgraders; only a genuinely fresh
+    // profile leaves onboarding/welcomeShown at its false default.
+    if (existingProfile && !m_settings->contains(QStringLiteral("onboarding/welcomeShown"))) {
+        m_settings->setValue(QStringLiteral("onboarding/welcomeShown"), true);
     }
     m_settings->setValue(QStringLiteral("meta/schemaVersion"), currentSchemaVersion);
     m_settings->sync();

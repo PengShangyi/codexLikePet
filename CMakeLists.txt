@@ -50,6 +50,10 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/settings/Localization.h
     src/settings/SettingsWindow.cpp
     src/settings/SettingsWindow.h
+    src/settings/OnboardingWindow.cpp
+    src/settings/OnboardingWindow.h
+    src/settings/AboutWindow.cpp
+    src/settings/AboutWindow.h
     src/pet/PetWindow.cpp
     src/pet/PetWindow.h
     src/pet/AnimationPlayer.cpp
@@ -116,6 +120,7 @@ qt_add_executable(Potato MACOSX_BUNDLE
 
 target_include_directories(Potato PRIVATE src)
 target_compile_options(Potato PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(Potato PRIVATE POTATO_VERSION="${PROJECT_VERSION}")
 
 target_link_libraries(Potato PRIVATE
     Qt6::Core

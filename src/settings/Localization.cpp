@@ -65,6 +65,23 @@ QString Localization::text(TextKey key) const
     case TextKey::PreviewAnimation: return zh ? QStringLiteral("预览动作") : QStringLiteral("Preview animation");
     case TextKey::PreviewClip: return zh ? QStringLiteral("扩展动画条") : QStringLiteral("Extension clip");
     case TextKey::ResourceFallbacks: return zh ? QStringLiteral("资源与回退") : QStringLiteral("Resources and fallbacks");
+    case TextKey::OnboardingTitle: return zh ? QStringLiteral("欢迎使用 Potato") : QStringLiteral("Welcome to Potato");
+    case TextKey::OnboardingIntro: return zh ? QStringLiteral("Potato 是一只安静地待在桌面上的小宠物。几点须知：") : QStringLiteral("Potato is a little desktop companion that quietly lives on your screen. A few things to know:");
+    case TextKey::OnboardingMenuBarHeading: return zh ? QStringLiteral("它住在菜单栏") : QStringLiteral("It lives in the menu bar");
+    case TextKey::OnboardingMenuBarBody: return zh ? QStringLiteral("Potato 没有程序坞图标。点按屏幕右上角菜单栏里的土豆图标即可打开菜单。") : QStringLiteral("Potato has no Dock icon. Click the potato in the menu bar at the top-right of your screen to open its menu.");
+    case TextKey::OnboardingSettingsHeading: return zh ? QStringLiteral("在设置里调整") : QStringLiteral("Adjust it in Settings");
+    case TextKey::OnboardingSettingsBody: return zh ? QStringLiteral("从菜单栏打开“设置…”可以调整大小、动画速度、季节半球与语言。") : QStringLiteral("Open “Settings…” from the menu bar to change size, animation speed, season hemisphere, and language.");
+    case TextKey::OnboardingTypingHeading: return zh ? QStringLiteral("打字动画是可选的") : QStringLiteral("Typing animation is optional");
+    case TextKey::OnboardingTypingBody: return zh ? QStringLiteral("默认关闭。开启后只统计按键活动时间，绝不读取或保存按键内容。") : QStringLiteral("Off by default. When enabled it only measures activity timing and never reads or stores key contents.");
+    case TextKey::OnboardingImportHeading: return zh ? QStringLiteral("可以导入更多宠物") : QStringLiteral("Import more pets");
+    case TextKey::OnboardingImportBody: return zh ? QStringLiteral("在“设置 › 宠物”里导入 .potatopet 或资源目录，即可添加自定义宠物。") : QStringLiteral("Add custom pets by importing a .potatopet file or resource directory under “Settings › Pet”.");
+    case TextKey::OnboardingGetStarted: return zh ? QStringLiteral("开始使用") : QStringLiteral("Get started");
+    case TextKey::AboutMenuItem: return zh ? QStringLiteral("关于 Potato…") : QStringLiteral("About Potato…");
+    case TextKey::WelcomeMenuItem: return zh ? QStringLiteral("欢迎向导…") : QStringLiteral("Welcome Guide…");
+    case TextKey::AboutTagline: return zh ? QStringLiteral("本地优先的 macOS 菜单栏桌面宠物。") : QStringLiteral("A local-first macOS menu-bar desktop pet.");
+    case TextKey::AboutCopyright: return zh ? QStringLiteral("© 2026 Potato。保留所有权利。") : QStringLiteral("© 2026 Potato. All rights reserved.");
+    case TextKey::AboutVersionLabel: return zh ? QStringLiteral("版本") : QStringLiteral("Version");
+    case TextKey::AboutViewLicenses: return zh ? QStringLiteral("第三方许可…") : QStringLiteral("Third-party licenses…");
     }
     return {};
 }
