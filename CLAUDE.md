@@ -63,11 +63,18 @@ never invents transitions:
   missing. Produces the variant key (e.g. `spring-day`) used to pick atlas/clips.
 - **`AnimationPlayer`** (`src/pet/`) — plays either a Codex v2 atlas row **or** one
   validated Potato clip. Reduced motion freezes either source on its first frame.
+  `TypingAnimationDriver` sits beside it and owns the keystroke-driven typing
+  animation (hold the clip at rest, advance one press per key, relax after a pause).
 - **Resource pipeline** (`src/resources/`) — `PetPackageValidator` owns contract
   validation, `ArchiveExtractor` owns hostile-archive boundaries (zip via vendored
   miniz), `PetStore` owns staged atomic install; `PetLibrary` lists pets and
   `PetPackageImporter` drives import. Imported pets live in
   `~/Library/Application Support/Potato/Pets`, outside the repo.
+- **Shared rule modules** — `PackagePolicy` (`src/resources/`) holds the filesystem
+  safety rules (portable relative paths, root escape, file-type allowlist, pet id)
+  and `ClipContract` (`src/pet/`) holds the clip geometry and duration bounds. Both
+  the validator and the runtime loaders call these rather than restating them; a
+  rule must never be written out twice.
 - **Input** (`src/input/`) — `InputActivitySource` is the boundary
   (`MacInputActivitySource.mm`); `TypingActivityDetector` derives activity frequency
   from timestamps only.
@@ -76,9 +83,20 @@ never invents transitions:
   no custom LaunchAgent), and `QuoteProvider` (`src/quotes/`, local-only).
 
 Runtime resource discipline (enforced by design): decode lazily, retain at most two
-atlas cache entries (`AtlasCache`), clear extension clips on environment/pet change,
-stop pet/environment/input timers while hidden or asleep, recompute primary-screen
-placement (`WindowPlacement`) after display change and wake.
+atlas cache entries (`AtlasCache`) and a bounded clip cache (`ClipCache`), clear
+extension clips on environment/pet change, stop pet/environment/input timers while
+hidden or asleep, recompute primary-screen placement (`WindowPlacement`) after display
+change and wake.
+
+**Validation depth.** Decoding every atlas and clip is the entire cost of package
+validation (~400 ms for the built-in pet, versus ~3 ms without). It runs at the trust
+boundary only — `PetPackageImporter` and `PetStore`'s post-copy recheck use
+`ValidationDepth::Full`; `PetLibrary` lists installed pets with
+`ValidationDepth::Metadata`. Both depths enforce every *safety* rule (directory
+envelope, symlinks, executable bits, path safety, unreferenced files, clip geometry
+from image headers); Full adds only the pixel-level checks. Anything that slips past
+listing still surfaces at load through `PetAtlas`/`AnimationClip::load`. Do not move
+deep validation back onto the launch path.
 
 ## Pet resource contract
 
@@ -99,6 +117,15 @@ is never installed into `~/.codex`.
 - Every service that touches a system boundary has a pure-C++ interface header plus a
   `Mac*` implementation, so tests link the logic without the system dependency. Follow
   this pattern when adding new platform integration.
-- Each test in `tests/CMakeLists.txt` is its own `qt_add_executable` linking only the
-  sources under test — add new tests the same way rather than into a shared binary.
+- Each test in `tests/CMakeLists.txt` is its own `qt_add_executable` linking only what
+  it exercises — add new tests the same way rather than into a shared binary. Low-level
+  modules come from the shared static libraries declared in the root `CMakeLists.txt`
+  (`potato_settings_core`, `potato_environment`, `potato_geometry`, `potato_atlas`,
+  `potato_policy`, `potato_package`, `potato_overlay`); link those instead of relisting
+  their sources, and list any other source directly. Modules that pull in a system
+  framework stay out of the libraries so a test can still link the pure C++ half of a
+  boundary on its own.
 - Warnings are errors-adjacent: everything builds with `-Wall -Wextra -Wpedantic`.
+- Settings live behind `AppSettings` — including the pet window position. Never reach
+  for a bare `QSettings()`; that bypasses the injected store and makes tests write to
+  real macOS preference domains.

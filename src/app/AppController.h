@@ -135,9 +135,9 @@ private:
     PetLibrary *m_petLibrary;
     std::unique_ptr<PetPackageImporter> m_importer;
     std::unique_ptr<AtlasCache> m_atlasCache;
+    std::unique_ptr<ClipCache> m_clipCache;
     AnimationPlayer *m_animationPlayer;
     QSharedPointer<PetAtlas> m_currentAtlas;
-    std::unique_ptr<ClipCache> m_clipCache;
     BehaviorController *m_behavior;
     IdleActivityScheduler *m_idleScheduler;
     std::optional<V2AnimationState> m_activeFidget;

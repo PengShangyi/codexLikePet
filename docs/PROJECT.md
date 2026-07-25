@@ -29,6 +29,8 @@ scoped Objective-C++ adapters for macOS-only services.
 ## Engineering rules
 
 - Build out of source. Generated files are never committed.
+- Third-party code is vendored in-tree under `third_party/`, never fetched at
+  configure time: a clean build must succeed with no network access.
 - Keep runtime dependencies limited to Qt and explicitly vendored, licensed
   components. Python is tooling-only and is not embedded in the app.
 - Every milestone includes focused automated tests and one cohesive commit.
@@ -47,13 +49,23 @@ scoped Objective-C++ adapters for macOS-only services.
   Reduced motion freezes either source on its representative first frame.
 - `PetPackageValidator`, `ArchiveExtractor`, and `PetStore` respectively own
   contract validation, hostile archive boundaries, and staged atomic install.
+  The filesystem safety rules they share live once in `PackagePolicy`, and the
+  clip geometry and duration bounds live once in `ClipContract`; neither rule set
+  may be restated at a second call site.
 - `InputActivitySource`, `SystemActivitySource`, `LoginItemController`, and
   `QuoteProvider` are replaceable boundaries with deterministic test doubles.
 
 The application decodes resources lazily, retains at most two atlas cache
-entries, clears extension clips on environment or pet changes, stops pet,
-environment, and input timers while hidden or asleep, and recomputes primary
-screen placement after display changes and wake.
+entries and a bounded clip cache, clears extension clips on environment or pet
+changes, stops pet, environment, and input timers while hidden or asleep, and
+recomputes primary screen placement after display changes and wake.
+
+Pixel-level package validation happens at the trust boundary — import, and the
+recheck of the staged copy — never on the launch path. Listing installed pets
+uses the metadata depth, which still enforces every safety rule (directory
+envelope, symbolic links, executable bits, path safety, unreferenced files, clip
+geometry read from image headers) and omits only the decode. A resource that
+fails to decode is reported when it is loaded.
 
 ## Persistent locations
 
