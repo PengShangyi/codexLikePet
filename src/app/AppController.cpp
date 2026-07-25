@@ -95,6 +95,12 @@ AppController::AppController(AppRunMode mode, QObject *parent)
 {
     m_onboardingWindow = new OnboardingWindow(m_localization);
     m_aboutWindow = new AboutWindow(m_localization);
+    const auto applyPetAccessibility = [this] {
+        m_petWindow->setAccessibleName(m_localization->text(TextKey::PetAccessibleName));
+        m_petWindow->setAccessibleDescription(m_localization->text(TextKey::PetAccessibleDescription));
+    };
+    applyPetAccessibility();
+    connect(m_localization, &Localization::languageChanged, this, applyPetAccessibility);
     m_clickCompletionTimer->setSingleShot(true);
     m_clickCompletionTimer->setInterval(500);
     connect(m_clickCompletionTimer, &QTimer::timeout, this, [this] {

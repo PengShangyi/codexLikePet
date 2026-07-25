@@ -276,6 +276,20 @@ void SettingsWindow::retranslate()
     m_resetButton->setText(m_localization->text(TextKey::ResetPosition));
     m_aboutButton->setText(m_localization->text(TextKey::AboutMenuItem));
     m_closeButton->setText(m_localization->text(TextKey::Close));
+
+    // Accessible names for VoiceOver: sliders and combos sit next to blank form
+    // labels, so their visible context isn't otherwise exposed to assistive tech.
+    m_petCombo->setAccessibleName(m_localization->text(TextKey::Pet));
+    m_importButton->setAccessibleName(m_localization->text(TextKey::ImportPet));
+    m_removeButton->setAccessibleName(m_localization->text(TextKey::RemovePet));
+    m_scaleSlider->setAccessibleName(m_localization->text(TextKey::Size));
+    m_speedSlider->setAccessibleName(m_localization->text(TextKey::AnimationSpeed));
+    m_typingCheck->setAccessibleDescription(m_localization->text(TextKey::TypingPrivacyNote));
+    m_motionCombo->setAccessibleName(m_localization->text(TextKey::ReducedMotion));
+    m_hemisphereCombo->setAccessibleName(m_localization->text(TextKey::Hemisphere));
+    m_dayStart->setAccessibleName(m_localization->text(TextKey::DayStarts));
+    m_nightStart->setAccessibleName(m_localization->text(TextKey::NightStarts));
+    m_languageCombo->setAccessibleName(m_localization->text(TextKey::Language));
 }
 
 void SettingsWindow::setPets(const QVector<PetRecord> &pets, const QString &selectedId)

@@ -23,6 +23,7 @@ enum class TextKey {
     OnboardingGetStarted,
     AboutMenuItem, WelcomeMenuItem, AboutTagline, AboutCopyright,
     AboutVersionLabel, AboutViewLicenses,
+    PetAccessibleName, PetAccessibleDescription,
 };
 
 class Localization final : public QObject

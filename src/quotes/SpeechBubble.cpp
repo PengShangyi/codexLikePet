@@ -40,6 +40,9 @@ void SpeechBubble::showMessage(const QString &text,
                                int durationMs)
 {
     m_text = text;
+    // The bubble is a custom-painted window; expose the message to VoiceOver.
+    setAccessibleName(text);
+    setAccessibleDescription(text);
     const QFontMetrics metrics(font());
     const QRect textBounds = metrics.boundingRect(QRect(0, 0, 240, 200),
                                                    Qt::TextWordWrap | Qt::AlignCenter,

@@ -82,6 +82,8 @@ QString Localization::text(TextKey key) const
     case TextKey::AboutCopyright: return zh ? QStringLiteral("© 2026 Potato。保留所有权利。") : QStringLiteral("© 2026 Potato. All rights reserved.");
     case TextKey::AboutVersionLabel: return zh ? QStringLiteral("版本") : QStringLiteral("Version");
     case TextKey::AboutViewLicenses: return zh ? QStringLiteral("第三方许可…") : QStringLiteral("Third-party licenses…");
+    case TextKey::PetAccessibleName: return zh ? QStringLiteral("Potato 桌面宠物") : QStringLiteral("Potato desktop pet");
+    case TextKey::PetAccessibleDescription: return zh ? QStringLiteral("可拖动的桌面宠物，点击可与它互动。") : QStringLiteral("A draggable desktop pet. Click it to interact.");
     }
     return {};
 }
