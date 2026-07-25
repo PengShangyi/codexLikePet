@@ -7,6 +7,7 @@
 
 class QScreen;
 class QMouseEvent;
+class QShowEvent;
 class AppSettings;
 
 class PetWindow final : public QWidget
@@ -32,6 +33,10 @@ public slots:
     void restorePosition();
     void resetPosition();
     void clampToPrimaryScreen();
+    // Re-push the native always-on-top level/collection behavior onto the current
+    // NSWindow. Needed after events that can recreate or reset it (show, flag
+    // toggle, screen change, wake); harmless (idempotent) otherwise.
+    void reapplyAlwaysOnTop();
 
 signals:
     void dragStarted();
@@ -46,6 +51,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     QRect primaryAvailableGeometry() const;

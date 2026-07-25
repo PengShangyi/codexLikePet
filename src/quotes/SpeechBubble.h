@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class QTimer;
+class QShowEvent;
 
 class SpeechBubble final : public QWidget
 {
@@ -24,6 +25,7 @@ public:
 protected:
     void paintEvent(QPaintEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     QString m_text;

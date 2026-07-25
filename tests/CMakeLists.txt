@@ -147,10 +147,43 @@ qt_add_executable(potato_behavior_test
     ../src/quotes/SpeechBubble.h
     ../src/quotes/QuoteProvider.cpp
     ../src/quotes/QuoteProvider.h
+    ../src/platform/WindowOverlay.cpp
+    ../src/platform/WindowOverlay.h
+    ../src/platform/MacWindowOverlay.mm
 )
 target_include_directories(potato_behavior_test PRIVATE ../src)
-target_link_libraries(potato_behavior_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+target_link_libraries(potato_behavior_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test "-framework AppKit")
 add_test(NAME potato_behavior_test COMMAND potato_behavior_test)
+
+qt_add_executable(potato_window_overlay_test
+    test_window_overlay.cpp
+    ../src/platform/WindowOverlay.cpp
+    ../src/platform/WindowOverlay.h
+)
+target_include_directories(potato_window_overlay_test PRIVATE ../src)
+target_link_libraries(potato_window_overlay_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME potato_window_overlay_test COMMAND potato_window_overlay_test)
+
+# Exercises the real NSWindow overlay state end to end. Deliberately NOT run under
+# offscreen: it self-skips (QSKIP) unless the cocoa QPA platform is active.
+qt_add_executable(potato_pet_overlay_test
+    test_pet_overlay.mm
+    ../src/pet/PetWindow.cpp
+    ../src/pet/PetWindow.h
+    ../src/pet/PetGesture.cpp
+    ../src/pet/PetGesture.h
+    ../src/pet/WindowPlacement.cpp
+    ../src/pet/WindowPlacement.h
+    ../src/platform/WindowOverlay.cpp
+    ../src/platform/WindowOverlay.h
+    ../src/platform/MacWindowOverlay.mm
+    ../src/settings/AppSettings.cpp
+    ../src/settings/AppSettings.h
+)
+target_include_directories(potato_pet_overlay_test PRIVATE ../src)
+target_link_libraries(potato_pet_overlay_test PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test "-framework AppKit")
+add_test(NAME potato_pet_overlay_test COMMAND potato_pet_overlay_test)
 
 qt_add_executable(potato_typing_activity_test
     test_typing_activity.cpp

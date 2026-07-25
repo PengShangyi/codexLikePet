@@ -2,6 +2,7 @@
 
 #include "pet/PetGesture.h"
 #include "pet/WindowPlacement.h"
+#include "platform/WindowOverlay.h"
 #include "settings/AppSettings.h"
 
 #include <QGuiApplication>
@@ -10,6 +11,8 @@
 #include <QPainter>
 #include <QScreen>
 #include <QSettings>
+#include <QShowEvent>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -44,7 +47,7 @@ PetWindow::PetWindow(AppSettings *settings, QWidget *parent)
     watchScreen(QGuiApplication::primaryScreen());
     connect(qApp, &QGuiApplication::primaryScreenChanged, this, [this, watchScreen](QScreen *screen) {
         watchScreen(screen);
-        clampToPrimaryScreen();
+        clampToPrimaryScreen();  // also re-pushes the overlay level (see below)
     });
 }
 
@@ -107,8 +110,24 @@ void PetWindow::setAlwaysOnTop(bool enabled)
     m_alwaysOnTop = enabled;
     setWindowFlag(Qt::WindowStaysOnTopHint, enabled);
     if (wasVisible) {
-        show();
+        show();  // re-shows the recreated native window; showEvent re-pushes the level
     }
+}
+
+void PetWindow::reapplyAlwaysOnTop()
+{
+    WindowOverlay::apply(winId(), m_alwaysOnTop);
+}
+
+void PetWindow::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    // Toggling window flags and re-showing recreate the NSWindow, resetting the
+    // level and collection behavior to Qt's defaults. Re-push now, and once more
+    // after this show settles, in case Qt reconfigures the native window right
+    // after showEvent is delivered.
+    reapplyAlwaysOnTop();
+    QTimer::singleShot(0, this, &PetWindow::reapplyAlwaysOnTop);
 }
 
 void PetWindow::resetPosition()
@@ -143,6 +162,11 @@ void PetWindow::clampToPrimaryScreen()
         move(constrained);
     }
     updateSnapEdge(WindowPlacement::resolveSnapEdge(pos(), size(), primaryAvailableGeometry(), 0));
+    // Display events that reach here (screen swap, resolution/scale change, dock
+    // or menu-bar reflow, wake) can recreate the native window and reset its level
+    // to Qt's default. Re-push the overlay level so every such event keeps the pet
+    // above other apps — including over their full-screen Spaces.
+    reapplyAlwaysOnTop();
 }
 
 void PetWindow::paintEvent(QPaintEvent *)

@@ -1,11 +1,13 @@
 #include "quotes/SpeechBubble.h"
 
 #include "pet/WindowPlacement.h"
+#include "platform/WindowOverlay.h"
 
 #include <QFontMetrics>
 #include <QHideEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QShowEvent>
 #include <QTimer>
 
 SpeechBubble::SpeechBubble(QWidget *parent)
@@ -85,4 +87,16 @@ void SpeechBubble::hideEvent(QHideEvent *event)
 {
     m_hideTimer->stop();
     QWidget::hideEvent(event);
+}
+
+void SpeechBubble::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    // Match the pet's overlay level so a bubble raised while a full-screen app is
+    // front draws over it too, instead of being stranded on the desktop Space.
+    const bool onTop = windowFlags().testFlag(Qt::WindowStaysOnTopHint);
+    WindowOverlay::apply(winId(), onTop);
+    QTimer::singleShot(0, this, [this] {
+        WindowOverlay::apply(winId(), windowFlags().testFlag(Qt::WindowStaysOnTopHint));
+    });
 }

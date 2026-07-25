@@ -107,6 +107,9 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/pet/PetGesture.h
     src/platform/MacApplication.h
     src/platform/MacApplication.mm
+    src/platform/WindowOverlay.h
+    src/platform/WindowOverlay.cpp
+    src/platform/MacWindowOverlay.mm
 )
 
 target_include_directories(Potato PRIVATE src)
