@@ -246,3 +246,14 @@ qt_add_executable(potato_pet_gesture_test
 target_include_directories(potato_pet_gesture_test PRIVATE ../src)
 target_link_libraries(potato_pet_gesture_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME potato_pet_gesture_test COMMAND potato_pet_gesture_test)
+
+qt_add_executable(potato_idle_scheduler_test
+    test_idle_scheduler.cpp
+    ../src/pet/IdleActivityScheduler.cpp
+    ../src/pet/IdleActivityScheduler.h
+    ../src/pet/PetAtlas.cpp
+    ../src/pet/PetAtlas.h
+)
+target_include_directories(potato_idle_scheduler_test PRIVATE ../src)
+target_link_libraries(potato_idle_scheduler_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME potato_idle_scheduler_test COMMAND potato_idle_scheduler_test)

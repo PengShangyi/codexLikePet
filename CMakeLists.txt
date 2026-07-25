@@ -58,6 +58,8 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/pet/AnimationClip.h
     src/pet/BehaviorController.cpp
     src/pet/BehaviorController.h
+    src/pet/IdleActivityScheduler.cpp
+    src/pet/IdleActivityScheduler.h
     src/pet/AtlasCache.cpp
     src/pet/AtlasCache.h
     src/pet/PetAtlas.cpp

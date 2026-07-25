@@ -74,6 +74,7 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     , m_atlasCache(new AtlasCache(2))
     , m_animationPlayer(new AnimationPlayer(this))
     , m_behavior(new BehaviorController(this))
+    , m_idleScheduler(new IdleActivityScheduler({}, this))
     , m_quoteProvider(new LocalQuoteProvider(
           [localization = m_localization] { return localization->usesChinese(); },
           this))
@@ -124,9 +125,20 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     connect(m_petWindow, &PetWindow::snapEdgeChanged, m_behavior, &BehaviorController::setSnapEdge);
     connect(m_petWindow, &PetWindow::clicked, this, &AppController::handlePetClick);
     connect(m_behavior, &BehaviorController::stateChanged, this, &AppController::applyBehaviorState);
+    connect(m_idleScheduler, &IdleActivityScheduler::fidgetRequested, this, &AppController::playIdleFidget);
     connect(m_animationPlayer, &AnimationPlayer::loopCompleted, this, [this](V2AnimationState state) {
         if (state == V2AnimationState::Waving && m_behavior->state() == BehaviorState::ClickReaction) {
             m_behavior->finishClickReaction();
+            return;
+        }
+        // An idle fidget played one loop: return to the looping Idle row and let
+        // the scheduler pick a fresh interval for the next one.
+        if (m_activeFidget && state == *m_activeFidget) {
+            m_activeFidget.reset();
+            if (m_behavior->state() == BehaviorState::Idle) {
+                applyBehaviorState(BehaviorState::Idle);
+                m_idleScheduler->notifyFidgetFinished();
+            }
         }
     });
     connect(m_animationPlayer, &AnimationPlayer::clipLoopCompleted, this, [this](const QString &name) {
@@ -159,6 +171,13 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     connect(m_motionController, &MotionController::reducedMotionChanged, m_animationPlayer, &AnimationPlayer::setReducedMotion);
     connect(m_motionController, &MotionController::reducedMotionChanged, m_settingsWindow, &SettingsWindow::setReducedMotion);
     connect(m_motionController, &MotionController::reducedMotionChanged, this, [this](bool reduced) {
+        // A fidget frozen mid-loop by reduced motion would never emit
+        // loopCompleted, so drop it and restore the (now static) Idle frame.
+        if (reduced && m_activeFidget) {
+            m_activeFidget.reset();
+            if (m_behavior->state() == BehaviorState::Idle) applyBehaviorState(BehaviorState::Idle);
+        }
+        updateIdleScheduler();
         // Typing switches between per-keystroke motion and a static rest frame.
         if (m_behavior->state() == BehaviorState::Typing) {
             applyBehaviorState(BehaviorState::Typing);
@@ -226,6 +245,7 @@ bool AppController::start()
     m_petWindow->restorePosition();
     m_petWindow->show();
     refreshPetLibrary();
+    updateIdleScheduler();
     setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
     m_environmentResolver->start();
     m_animationPlayer->setReducedMotion(m_motionController->reducedMotion());
@@ -246,12 +266,16 @@ void AppController::handleSystemSleep()
     m_typingDetector->reset();
     m_speechBubble->hide();
     m_clickCompletionTimer->stop();
+    m_activeFidget.reset();
     m_activeQuoteRequest = {};
+    updateIdleScheduler();
 }
 
 void AppController::handleSystemWake()
 {
     m_sleeping = false;
+    // clampToPrimaryScreen() also re-pushes the overlay level, in case display
+    // reconfiguration around sleep/wake dropped it.
     m_petWindow->clampToPrimaryScreen();
     m_environmentResolver->reevaluate();
     if (m_petVisible) {
@@ -263,6 +287,7 @@ void AppController::handleSystemWake()
             m_clickCompletionTimer->start();
         }
     }
+    updateIdleScheduler();
 }
 
 void AppController::setTypingMonitoringEnabled(bool enabled)
@@ -537,6 +562,8 @@ void AppController::onTypingKey()
 void AppController::applyBehaviorState(BehaviorState state)
 {
     if (state != BehaviorState::ClickReaction) m_clickCompletionTimer->stop();
+    // Any higher-priority behavior interrupts and clears an in-flight fidget.
+    if (state != BehaviorState::Idle) m_activeFidget.reset();
     // Leaving Typing stops the keystroke-driven press machinery.
     if (state != BehaviorState::Typing) {
         m_typingPressActive = false;
@@ -544,6 +571,7 @@ void AppController::applyBehaviorState(BehaviorState state)
     }
     if (!m_currentAtlas || !m_petVisible || m_sleeping) {
         m_animationPlayer->stop();
+        updateIdleScheduler();
         return;
     }
     switch (state) {
@@ -600,6 +628,34 @@ void AppController::applyBehaviorState(BehaviorState state)
     }
     */
     }
+    updateIdleScheduler();
+}
+
+void AppController::updateIdleScheduler()
+{
+    const bool active = m_behavior->state() == BehaviorState::Idle
+        && m_petVisible && !m_sleeping
+        && !m_motionController->reducedMotion()
+        && !m_currentAtlas.isNull();
+    m_idleScheduler->setActive(active);
+}
+
+void AppController::playIdleFidget(V2AnimationState state)
+{
+    // Re-check the full gate: the timer may fire in the window between arming and
+    // a higher-priority transition, or after motion/visibility changed.
+    if (m_behavior->state() != BehaviorState::Idle || !m_petVisible || m_sleeping
+        || m_motionController->reducedMotion() || m_currentAtlas.isNull()) {
+        return;
+    }
+    m_activeFidget = state;
+    m_animationPlayer->setState(state, true);
+    m_animationPlayer->start();
+}
+
+bool AppController::isIdleFidgetArmed() const
+{
+    return m_idleScheduler->isArmed();
 }
 
 bool AppController::isTypingPressActive() const
@@ -685,6 +741,7 @@ void AppController::setPetVisible(bool visible)
         m_typingDetector->reset();
         m_speechBubble->hide();
         m_clickCompletionTimer->stop();
+        m_activeFidget.reset();
         m_activeQuoteRequest = {};
     } else if (!m_sleeping) {
         m_environmentResolver->start();
@@ -695,6 +752,7 @@ void AppController::setPetVisible(bool visible)
             m_clickCompletionTimer->start();
         }
     }
+    updateIdleScheduler();
     updateVisibilityAction();
     emit petVisibilityRequested(visible);
 }

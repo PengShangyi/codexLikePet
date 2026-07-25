@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "pet/BehaviorController.h"
+#include "pet/IdleActivityScheduler.h"
 #include "resources/PetPackage.h"
 
 class QAction;
@@ -51,6 +52,8 @@ public:
     bool start();
     void requestSettings();
 
+    // Exposed for tests: whether the idle-fidget scheduler is currently armed.
+    bool isIdleFidgetArmed() const;
     // Exposed for tests: whether keystroke-driven typing presses are engaged
     // (a dedicated typing clip is loaded and motion is allowed).
     bool isTypingPressActive() const;
@@ -68,6 +71,8 @@ private:
     void importPet(bool directory);
     void removeSelectedPet();
     void applyBehaviorState(BehaviorState state);
+    void updateIdleScheduler();
+    void playIdleFidget(V2AnimationState state);
     void handlePetClick();
     void setTypingMonitoringEnabled(bool enabled);
     void beginTypingAnimation();
@@ -99,6 +104,8 @@ private:
     QSharedPointer<PetAtlas> m_currentAtlas;
     QHash<QString, QSharedPointer<AnimationClip>> m_clipCache;
     BehaviorController *m_behavior;
+    IdleActivityScheduler *m_idleScheduler;
+    std::optional<V2AnimationState> m_activeFidget;
     QuoteProvider *m_quoteProvider;
     SpeechBubble *m_speechBubble;
     InputActivitySource *m_inputSource;
