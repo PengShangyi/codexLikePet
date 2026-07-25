@@ -183,6 +183,37 @@ private slots:
         QCOMPARE(restored.positionLocked(), true);
     }
 
+    // QRect through the ini backend is asserted rather than assumed: QSettings
+    // serialises it as @Rect(x y w h), and if that ever stops round-tripping the
+    // settings window would silently reopen at the wrong size every launch.
+    void settingsGeometryRoundTripsThroughTheIniBackend()
+    {
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("settings.ini"));
+        {
+            AppSettings settings(path);
+            QVERIFY(!settings.hasSettingsGeometry());
+
+            settings.setSettingsGeometry(QRect(120, 80, 700, 540));
+            QVERIFY(settings.hasSettingsGeometry());
+            QCOMPARE(settings.settingsGeometry(), QRect(120, 80, 700, 540));
+
+            // An invalid rect must not be stored -- restoring it would produce a
+            // zero-sized window with no way back.
+            settings.setSettingsGeometry(QRect());
+            QCOMPARE(settings.settingsGeometry(), QRect(120, 80, 700, 540));
+        }
+        {
+            AppSettings restored(path);
+            QVERIFY(restored.hasSettingsGeometry());
+            QCOMPARE(restored.settingsGeometry(), QRect(120, 80, 700, 540));
+            restored.clearSettingsGeometry();
+            QVERIFY(!restored.hasSettingsGeometry());
+        }
+        AppSettings cleared(path);
+        QVERIFY(!cleared.hasSettingsGeometry());
+    }
+
     void recoversCorruptAndNonFiniteNumericValues()
     {
         QTemporaryDir temp;

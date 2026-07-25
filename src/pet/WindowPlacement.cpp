@@ -30,6 +30,30 @@ bool isUsableSavedPosition(const QPoint &position,
         && availableGeometry.contains(proposed.bottomRight());
 }
 
+QPoint centeredPosition(const QSize &windowSize, const QRect &availableGeometry)
+{
+    return QPoint(availableGeometry.left()
+                      + (availableGeometry.width() - windowSize.width()) / 2,
+                  availableGeometry.top()
+                      + (availableGeometry.height() - windowSize.height()) / 2);
+}
+
+bool isUsableSavedGeometry(const QRect &geometry, const QRect &availableGeometry)
+{
+    if (!geometry.isValid() || geometry.isEmpty()) return false;
+    // Require an intersection rather than full containment: a window nudged
+    // slightly past the edge is still findable and gets clamped, whereas one saved
+    // on a monitor that is now gone must be discarded outright.
+    return availableGeometry.intersects(geometry);
+}
+
+QRect fitToAvailableGeometry(const QRect &geometry, const QRect &availableGeometry)
+{
+    const QSize size(std::min(geometry.width(), availableGeometry.width()),
+                     std::min(geometry.height(), availableGeometry.height()));
+    return QRect(clampToAvailableGeometry(geometry.topLeft(), size, availableGeometry), size);
+}
+
 SnapEdge resolveSnapEdge(const QPoint &position,
                          const QSize &windowSize,
                          const QRect &availableGeometry,

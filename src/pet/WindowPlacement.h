@@ -16,6 +16,12 @@ QPoint clampToAvailableGeometry(const QPoint &position,
 bool isUsableSavedPosition(const QPoint &position,
                            const QSize &windowSize,
                            const QRect &availableGeometry);
+// Settings-window placement. Same discard-if-it-no-longer-fits discipline as the
+// pet's saved position, but for a resizable window, so the size is restored too and
+// has to be clamped rather than merely accepted or rejected.
+QPoint centeredPosition(const QSize &windowSize, const QRect &availableGeometry);
+bool isUsableSavedGeometry(const QRect &geometry, const QRect &availableGeometry);
+QRect fitToAvailableGeometry(const QRect &geometry, const QRect &availableGeometry);
 SnapEdge resolveSnapEdge(const QPoint &position,
                          const QSize &windowSize,
                          const QRect &availableGeometry,

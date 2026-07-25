@@ -29,6 +29,50 @@ private slots:
         QVERIFY(!WindowPlacement::isUsableSavedPosition(QPoint(801, 500), QSize(200, 200), available));
     }
 
+    void centersASettingsWindowOnTheAvailableArea()
+    {
+        const QRect available(0, 25, 1000, 675);
+        const QPoint centered = WindowPlacement::centeredPosition(QSize(680, 520), available);
+        QCOMPARE(centered, QPoint(160, 102));
+
+        // A window larger than the screen centers to a negative offset; clamping is
+        // fitToAvailableGeometry's job, not this function's.
+        const QPoint oversized = WindowPlacement::centeredPosition(QSize(1200, 900), available);
+        QVERIFY(oversized.x() < available.left());
+    }
+
+    // The settings window is resizable and its saved rect can outlive the display it
+    // was saved on, so unlike the pet's saved position this asks for an intersection
+    // rather than full containment: a window nudged past the edge is still findable
+    // and gets clamped, one on a monitor that is gone must be discarded.
+    void acceptsPartlyVisibleSavedGeometryButNotAVanishedDisplay()
+    {
+        const QRect available(0, 25, 1000, 675);
+        QVERIFY(WindowPlacement::isUsableSavedGeometry(QRect(100, 100, 680, 520), available));
+        QVERIFY(WindowPlacement::isUsableSavedGeometry(QRect(960, 660, 680, 520), available));
+
+        QVERIFY(!WindowPlacement::isUsableSavedGeometry(QRect(2000, 100, 680, 520), available));
+        QVERIFY(!WindowPlacement::isUsableSavedGeometry(QRect(), available));
+        QVERIFY(!WindowPlacement::isUsableSavedGeometry(QRect(100, 100, 0, 0), available));
+    }
+
+    void fitsSavedGeometryBackInsideTheAvailableArea()
+    {
+        const QRect available(0, 25, 1000, 675);
+
+        // Already inside: unchanged.
+        QCOMPARE(WindowPlacement::fitToAvailableGeometry(QRect(100, 100, 680, 520), available),
+                 QRect(100, 100, 680, 520));
+
+        // Hanging off the bottom right: moved back, size kept.
+        QCOMPARE(WindowPlacement::fitToAvailableGeometry(QRect(900, 600, 680, 520), available),
+                 QRect(320, 180, 680, 520));
+
+        // Bigger than the screen: shrunk to fit, then positioned at the origin.
+        QCOMPARE(WindowPlacement::fitToAvailableGeometry(QRect(-50, 0, 1400, 900), available),
+                 QRect(0, 25, 1000, 675));
+    }
+
     void resolvesSupportedSnapEdgesWithBottomPriority()
     {
         const QRect available(0, 0, 1000, 700);

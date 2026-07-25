@@ -140,6 +140,28 @@ void AppSettings::clearWindowPosition()
     m_settings->remove(QStringLiteral("window/position"));
 }
 
+bool AppSettings::hasSettingsGeometry() const
+{
+    return m_settings->contains(QStringLiteral("window/settingsGeometry"));
+}
+
+QRect AppSettings::settingsGeometry() const
+{
+    return m_settings->value(QStringLiteral("window/settingsGeometry")).toRect();
+}
+
+void AppSettings::setSettingsGeometry(const QRect &value)
+{
+    if (!value.isValid()) return;
+    if (hasSettingsGeometry() && settingsGeometry() == value) return;
+    m_settings->setValue(QStringLiteral("window/settingsGeometry"), value);
+}
+
+void AppSettings::clearSettingsGeometry()
+{
+    m_settings->remove(QStringLiteral("window/settingsGeometry"));
+}
+
 void AppSettings::setScale(double value)
 {
     value = std::isfinite(value) ? std::clamp(value, factorMinimum, factorMaximum) : 1.0;

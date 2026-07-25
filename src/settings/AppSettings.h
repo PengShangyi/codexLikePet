@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QPoint>
+#include <QRect>
 #include <QTime>
 
 #include <memory>
@@ -59,6 +60,13 @@ public:
     QPoint windowPosition() const;
     void setWindowPosition(const QPoint &value);
     void clearWindowPosition();
+
+    // Settings-window geometry. Absent on a fresh profile, which is the signal to
+    // center the window on first open rather than let the WM place it.
+    bool hasSettingsGeometry() const;
+    QRect settingsGeometry() const;
+    void setSettingsGeometry(const QRect &value);
+    void clearSettingsGeometry();
 
 public slots:
     void setScale(double value);
