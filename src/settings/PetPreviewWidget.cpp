@@ -98,8 +98,10 @@ void PetPreviewWidget::paintEvent(QPaintEvent *)
 
     if (!m_atlas && !m_clip) return;
 
-    const QImage frame = m_clip ? m_clip->frame(m_frameIndex)
-                                : m_atlas->frame(m_state, m_frameIndex);
+    // A view rather than a copy: this is paintEvent, so it ran on every repaint
+    // and not merely once per animation frame.
+    const QImage frame = m_clip ? m_clip->frameView(m_frameIndex)
+                                : m_atlas->frameView(m_state, m_frameIndex);
     QSize target = frame.size();
     const int inset = Theme::Metrics::stageInset;
     target.scale(size() - QSize(inset * 2, inset * 2), Qt::KeepAspectRatio);
@@ -181,6 +183,6 @@ void PetPreviewWidget::scheduleNextFrame()
     }
     const int duration = m_clip
         ? m_clip->durationMs(m_frameIndex)
-        : PetAtlas::animationSpec(m_state).durationsMs.value(m_frameIndex, 140);
+        : PetAtlas::animationSpec(m_state).durationAt(m_frameIndex, 140);
     m_timer->start(duration);
 }

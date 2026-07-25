@@ -6,7 +6,9 @@
 #include "pet/TypingAnimationDriver.h"
 #include "support/AtlasFixture.h"
 
+#include <QSharedPointer>
 #include <QTemporaryDir>
+#include <QWeakPointer>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -29,14 +31,21 @@ private slots:
 
     void exposesTheV2Contract()
     {
-        const AnimationSpec idle = PetAtlas::animationSpec(V2AnimationState::Idle);
+        const AnimationSpec &idle = PetAtlas::animationSpec(V2AnimationState::Idle);
         QCOMPARE(idle.row, 0);
         QCOMPARE(idle.frameCount, 6);
-        QCOMPARE(idle.durationsMs, QVector<int>({280, 110, 110, 140, 140, 320}));
+        const int idleDurations[] = {280, 110, 110, 140, 140, 320};
+        for (int index = 0; index < idle.frameCount; ++index) {
+            QCOMPARE(idle.durationAt(index, -1), idleDurations[index]);
+        }
+        // Past frameCount the array is padding, so durationAt reports the caller's
+        // fallback rather than a stale zero.
+        QCOMPARE(idle.durationAt(idle.frameCount, -1), -1);
+        QCOMPARE(idle.durationAt(-1, -1), -1);
 
-        const AnimationSpec running = PetAtlas::animationSpec(V2AnimationState::RunningRight);
+        const AnimationSpec &running = PetAtlas::animationSpec(V2AnimationState::RunningRight);
         QCOMPARE(running.frameCount, 8);
-        QCOMPARE(running.durationsMs.last(), 220);
+        QCOMPARE(running.durationAt(running.frameCount - 1, -1), 220);
     }
 
     void loadsAndExtractsFrames()
@@ -255,6 +264,115 @@ private slots:
         QTest::qWait(80);
         QCOMPARE(loopSpy.count(), 0);
         QVERIFY(!player.isRunning());
+    }
+
+    // frameView() hands out a QImage pointing into the atlas's own pixels rather
+    // than copying them, which can fail in two opposite directions. These three
+    // tests pin down both, because a test for one is blind to the other: a
+    // use-after-free check passes just as happily when the view leaks forever.
+
+    // Direction one: the view must NOT dangle. It has to keep working after the
+    // PetAtlas it came from is gone.
+    void aFrameViewOutlivesTheAtlasItCameFrom()
+    {
+        const QString source = createAtlas(QStringLiteral("view-source"), QColor(11, 22, 33));
+        const QString other = createAtlas(QStringLiteral("view-other"), QColor(99, 88, 77));
+        QVERIFY(!source.isEmpty() && !other.isEmpty());
+
+        AtlasCache cache(1);
+        QImage view;
+        QWeakPointer<PetAtlas> observer;
+        {
+            const QSharedPointer<PetAtlas> atlas = cache.load(source);
+            QVERIFY(atlas);
+            observer = atlas;
+            view = atlas->frameView(V2AnimationState::Idle, 0);
+        }
+
+        // Capacity is one, so loading another atlas evicts this one. With the
+        // local reference already gone, that destroys the PetAtlas outright.
+        QVERIFY(cache.load(other));
+        QVERIFY2(observer.isNull(), "the PetAtlas should be gone, or this proves nothing");
+
+        // The pixels it handed out are still there and still correct.
+        QCOMPARE(view.size(), QSize(PetAtlas::CellWidth, PetAtlas::CellHeight));
+        QCOMPARE(view.pixelColor(1, 1), QColor(11, 22, 33));
+
+        // Read the buffer again from here rather than only through Qt. It looks
+        // redundant and is not: QImage::pixelColor runs inside QtGui, which is a
+        // prebuilt framework and therefore not instrumented, so a dangling view
+        // reads freed memory without AddressSanitizer ever seeing the load. This
+        // dereference happens in instrumented code, so ASan does check it.
+        quint32 sum = 0;
+        for (int y = 0; y < view.height(); ++y) {
+            const auto *line = reinterpret_cast<const quint32 *>(view.constScanLine(y));
+            for (int x = 0; x < view.width(); ++x) sum += qAlpha(line[x]);
+        }
+        QCOMPARE(sum, quint32(255) * quint32(view.width()) * quint32(view.height()));
+    }
+
+    // Direction two: the view must not pin those pixels forever. isDetached() is
+    // false exactly while something else still references the buffer, so it reads
+    // the retained reference directly instead of inferring it.
+    void aFrameViewReleasesThePixelsWhenItDies()
+    {
+        PetAtlas atlas;
+        QVERIFY(atlas.load(createAtlas(QStringLiteral("view-release"), QColor(5, 6, 7))));
+
+        QImage owner = atlas.frame(V2AnimationState::Idle, 0);  // a real copy
+        QVERIFY(owner.isDetached());
+        {
+            const QImage view = cellViewOf(owner, 0, 0, 8, 8);
+            QVERIFY2(!owner.isDetached(), "the view should be holding a reference");
+        }
+        QVERIFY2(owner.isDetached(), "the view leaked its reference to the pixels");
+    }
+
+    // The same thing at the scale the pet actually runs at. A per-frame leak of
+    // the cleanup payload would strand one handle for every frame ever shown, so
+    // churn enough of them that scripts/check-leaks.sh cannot miss it.
+    void churningFrameViewsStrandsNothing()
+    {
+        const QSharedPointer<PetAtlas> atlas = QSharedPointer<PetAtlas>::create();
+        QVERIFY(atlas->load(createAtlas(QStringLiteral("view-churn"), QColor(3, 4, 5))));
+
+        int wrongSize = 0;
+        for (int index = 0; index < 5000; ++index) {
+            const QImage view = atlas->frameView(V2AnimationState::Idle, index % 6);
+            if (view.size() != QSize(PetAtlas::CellWidth, PetAtlas::CellHeight)) ++wrongSize;
+        }
+        QCOMPARE(wrongSize, 0);
+    }
+
+    // Swapping the player's atlas must let the old one go, even though the frame
+    // it last emitted is still being held -- that frame keeps the pixels alive,
+    // not the PetAtlas.
+    void replacingThePlayersAtlasReleasesThePreviousOne()
+    {
+        const QString first = createAtlas(QStringLiteral("handoff-first"), QColor(1, 2, 3));
+        const QString second = createAtlas(QStringLiteral("handoff-second"), QColor(4, 5, 6));
+
+        AnimationPlayer player;
+        QImage lastFrame;
+        connect(&player, &AnimationPlayer::frameReady, this,
+                [&lastFrame](const QImage &frame) { lastFrame = frame; });
+
+        QWeakPointer<PetAtlas> observer;
+        {
+            auto atlas = QSharedPointer<PetAtlas>::create();
+            QVERIFY(atlas->load(first));
+            observer = atlas;
+            player.setAtlas(atlas);
+        }
+        QVERIFY(!observer.isNull());   // the player holds it
+        QVERIFY(!lastFrame.isNull());
+
+        auto replacement = QSharedPointer<PetAtlas>::create();
+        QVERIFY(replacement->load(second));
+        player.setAtlas(replacement);
+
+        QVERIFY2(observer.isNull(), "the player kept the atlas it replaced");
+        QCOMPARE(lastFrame.pixelColor(1, 1), QColor(4, 5, 6));  // now the new one
     }
 
 private:

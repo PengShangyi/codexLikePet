@@ -105,10 +105,14 @@ bool AnimationPlayer::isRunning() const
 
 void AnimationPlayer::presentCurrentFrame()
 {
+    // Views, not copies: this runs on every frame, and copying a cell meant
+    // allocating and memcpying 156KB several times a second for the whole time
+    // the pet was on screen. The view keeps its own pixels alive, so a receiver
+    // may hold it after the atlas is swapped or evicted.
     if (m_clip && m_clip->isValid()) {
-        emit frameReady(m_clip->frame(m_frameIndex));
+        emit frameReady(m_clip->frameView(m_frameIndex));
     } else if (m_atlas && m_atlas->isValid()) {
-        emit frameReady(m_atlas->frame(m_state, m_frameIndex));
+        emit frameReady(m_atlas->frameView(m_state, m_frameIndex));
     }
 }
 
@@ -120,7 +124,7 @@ void AnimationPlayer::scheduleNextFrame()
     }
     const int duration = m_clip
         ? m_clip->durationMs(m_frameIndex)
-        : PetAtlas::animationSpec(m_state).durationsMs.value(m_frameIndex, 150);
+        : PetAtlas::animationSpec(m_state).durationAt(m_frameIndex, 150);
     m_timer->start(std::max(1, qRound(duration / m_speedFactor)));
 }
 

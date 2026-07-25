@@ -99,6 +99,10 @@ qt_add_executable(potato_ui_test
     test_theme.cpp
     test_ui_kit.cpp
     test_settings_window.cpp
+    test_pet_window.cpp
+    ../src/pet/PetWindow.cpp
+    ../src/pet/PetWindow.h
+    ../src/platform/MacWindowOverlay.mm
     ../src/settings/SettingsWindow.cpp
     ../src/settings/SettingsWindow.h
     ../src/settings/PetPreviewWidget.cpp
@@ -108,12 +112,13 @@ qt_add_executable(potato_ui_test
 )
 target_include_directories(potato_ui_test PRIVATE ../src .)
 target_link_libraries(potato_ui_test PRIVATE
-    potato_settings_core potato_atlas potato_ui potato_theme potato_geometry
+    potato_settings_core potato_atlas potato_ui potato_theme potato_geometry potato_overlay
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test "-framework AppKit")
 potato_add_grouped_tests(potato_ui_test OFFSCREEN CLASSES
     potato_theme_test           ThemeTest
     potato_ui_kit_test          UiKitTest
-    potato_settings_window_test SettingsWindowTest)
+    potato_settings_window_test SettingsWindowTest
+    potato_pet_window_test      PetWindowRenderTest)
 
 qt_add_executable(potato_package_test
     groups/package_main.cpp

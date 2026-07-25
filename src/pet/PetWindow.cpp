@@ -65,6 +65,7 @@ SnapEdge PetWindow::snapEdge() const
 void PetWindow::setFrame(const QImage &frame)
 {
     m_frame = frame;
+    m_scaled = QPixmap();  // a new frame at the same size still needs rescaling
     update();
 }
 
@@ -72,7 +73,26 @@ void PetWindow::setSmoothRendering(bool smooth)
 {
     if (m_smoothRendering == smooth) return;
     m_smoothRendering = smooth;
+    m_scaled = QPixmap();  // the filter changed, so the cached scale is wrong
     update();
+}
+
+void PetWindow::ensureScaledFrame()
+{
+    if (m_frame.isNull()) {
+        m_scaled = QPixmap();
+        return;
+    }
+    const qreal dpr = devicePixelRatioF();
+    const QSize deviceSize = size() * dpr;
+    if (m_scaled.size() == deviceSize && qFuzzyCompare(m_scaled.devicePixelRatio(), dpr)) {
+        return;
+    }
+    m_scaled = QPixmap::fromImage(m_frame.scaled(deviceSize,
+                                                 Qt::IgnoreAspectRatio,
+                                                 m_smoothRendering ? Qt::SmoothTransformation
+                                                                   : Qt::FastTransformation));
+    m_scaled.setDevicePixelRatio(dpr);
 }
 
 void PetWindow::setScaleFactor(double factor)
@@ -196,15 +216,19 @@ void PetWindow::clampToPrimaryScreen()
 void PetWindow::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, m_smoothRendering);
 
     if (!m_frame.isNull()) {
-        painter.drawImage(rect(), m_frame);
+        // No render hints and no scaling here: the frame is already at device
+        // resolution, so this is a straight blit. drawImage(rect(), ...) used to
+        // rescale the cell on every repaint, and SmoothPixmapTransform now lives
+        // in ensureScaledFrame's transformation mode instead.
+        ensureScaledFrame();
+        painter.drawPixmap(0, 0, m_scaled);
         return;
     }
 
     // Defensive fallback used only when no validated pet frame is available.
+    painter.setRenderHint(QPainter::Antialiasing);
     const QRectF body(width() * 0.17, height() * 0.18, width() * 0.66, height() * 0.68);
     painter.setPen(QPen(Theme::brandOutline(), std::max(2.0, width() / 80.0)));
     painter.setBrush(Theme::brandPotato());

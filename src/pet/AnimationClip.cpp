@@ -41,7 +41,8 @@ bool AnimationClip::load(const QString &filePath, const QVector<int> &durationsM
         return false;
     }
 
-    m_image = image.convertToFormat(QImage::Format_RGBA8888);
+    // Native raster format, for the same reason as PetAtlas::load.
+    m_image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     m_durationsMs = durationsMs;
     return true;
 }
@@ -63,4 +64,14 @@ QImage AnimationClip::frame(int frameIndex) const
                         0,
                         PetAtlas::CellWidth,
                         PetAtlas::CellHeight);
+}
+
+QImage AnimationClip::frameView(int frameIndex) const
+{
+    if (!isValid() || frameIndex < 0 || frameIndex >= frameCount()) return {};
+    return cellViewOf(m_image,
+                      frameIndex * PetAtlas::CellWidth,
+                      0,
+                      PetAtlas::CellWidth,
+                      PetAtlas::CellHeight);
 }

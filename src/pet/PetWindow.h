@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QImage>
+#include <QPixmap>
 #include <QWidget>
 
 #include "pet/WindowPlacement.h"
@@ -68,9 +69,18 @@ private:
     // snap edge without touching the native window level. The public slot adds
     // the overlay re-push, which is only needed for display/wake events.
     void clampPosition();
+    // Brings m_scaled up to date with m_frame, the window size, and the device
+    // pixel ratio. Cheap when already current, so paintEvent can call it and no
+    // caller has to enumerate every way the geometry might have changed.
+    void ensureScaledFrame();
 
     AppSettings *m_settings;
     QImage m_frame;
+    // m_frame scaled to the window, so paintEvent is a blit. Scaling used to
+    // happen inside drawImage on every repaint, which is more often than the
+    // frame changes: the pet repaints whenever it is exposed, not only when the
+    // animation advances.
+    QPixmap m_scaled;
     double m_scaleFactor = 1.0;
     bool m_alwaysOnTop = true;
     bool m_positionLocked = false;
