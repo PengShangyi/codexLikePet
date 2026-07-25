@@ -63,6 +63,10 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/pet/IdleActivityScheduler.h
     src/pet/AtlasCache.cpp
     src/pet/AtlasCache.h
+    src/pet/ClipCache.cpp
+    src/pet/ClipCache.h
+    src/pet/TypingAnimationDriver.cpp
+    src/pet/TypingAnimationDriver.h
     src/pet/PetAtlas.cpp
     src/pet/PetAtlas.h
     src/pet/ClipContract.h
@@ -70,6 +74,8 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/resources/PackagePolicy.h
     src/resources/PetPackage.cpp
     src/resources/PetPackage.h
+    src/resources/PetResourceSummary.cpp
+    src/resources/PetResourceSummary.h
     src/resources/PetPackageValidator.cpp
     src/resources/PetPackageValidator.h
     src/resources/ArchiveExtractor.cpp

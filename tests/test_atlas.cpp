@@ -1,7 +1,9 @@
 #include "pet/AtlasCache.h"
 #include "pet/AnimationClip.h"
 #include "pet/AnimationPlayer.h"
+#include "pet/ClipCache.h"
 #include "pet/PetAtlas.h"
+#include "pet/TypingAnimationDriver.h"
 
 #include <QTemporaryDir>
 #include <QSignalSpy>
@@ -76,6 +78,52 @@ private slots:
         QVERIFY(cache.contains(third));
     }
 
+    void clipCacheEvictsLeastRecentlyUsedAndKeysOnDurations()
+    {
+        const auto strip = [this](const QString &name, int frames) {
+            const QString path = m_temp.filePath(name + QStringLiteral(".png"));
+            QImage image(PetAtlas::CellWidth * frames,
+                         PetAtlas::CellHeight,
+                         QImage::Format_RGBA8888);
+            image.fill(QColor(10, 20, 30, 200));
+            return image.save(path) ? path : QString();
+        };
+        const QString first = strip(QStringLiteral("cc-first"), 2);
+        const QString second = strip(QStringLiteral("cc-second"), 2);
+        const QString third = strip(QStringLiteral("cc-third"), 2);
+        QVERIFY(!first.isEmpty() && !second.isEmpty() && !third.isEmpty());
+        const QVector<int> durations{80, 80};
+
+        ClipCache cache(2);
+        QVERIFY(cache.load(first, durations));
+        QVERIFY(cache.load(second, durations));
+        QCOMPARE(cache.size(), 2);
+        QVERIFY(cache.load(first, durations));   // refresh first's recency
+        QVERIFY(cache.load(third, durations));   // evicts second, not first
+        QVERIFY(cache.contains(first, durations));
+        QVERIFY(!cache.contains(second, durations));
+        QVERIFY(cache.contains(third, durations));
+
+        // Same strip, different declared timings -> a distinct entry, because the
+        // decoded clips are not interchangeable.
+        ClipCache keyed(4);
+        QVERIFY(keyed.load(first, {80, 80}));
+        QVERIFY(keyed.load(first, {120, 120}));
+        QCOMPARE(keyed.size(), 2);
+        QVERIFY(keyed.contains(first, {80, 80}));
+        QVERIFY(keyed.contains(first, {120, 120}));
+        QVERIFY(!keyed.contains(first, {200, 200}));
+
+        // A clip that fails to load reports why and is not cached.
+        QString error;
+        QVERIFY(!keyed.load(first, {10, 10}, &error)); // below the 50ms floor
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(keyed.size(), 2);
+
+        keyed.clear();
+        QCOMPARE(keyed.size(), 0);
+    }
+
     void loadsAndPlaysAnExtensionClip()
     {
         const QString path = m_temp.filePath(QStringLiteral("clip.png"));
@@ -126,6 +174,92 @@ private slots:
             QTest::qWait(5);
         }
         QVERIFY2(loopSpy.count() >= 1, "playback stalled while the speed kept changing");
+        player.stop();
+    }
+
+    // The keystroke-driven typing animation, extracted from AppController. Each
+    // frame of the strip gets a distinct colour so the emitted frame identifies
+    // which cell the driver is holding.
+    void typingDriverAlternatesPawsAndRelaxesToRest()
+    {
+        const QString path = m_temp.filePath(QStringLiteral("typing3.png"));
+        QImage strip(PetAtlas::CellWidth * 3, PetAtlas::CellHeight, QImage::Format_RGBA8888);
+        strip.fill(Qt::transparent);
+        const QColor colors[3] = {QColor(10, 0, 0, 255), QColor(0, 10, 0, 255), QColor(0, 0, 10, 255)};
+        for (int frame = 0; frame < 3; ++frame) {
+            for (int x = 0; x < PetAtlas::CellWidth; ++x) {
+                for (int y = 0; y < PetAtlas::CellHeight; ++y) {
+                    strip.setPixelColor(frame * PetAtlas::CellWidth + x, y, colors[frame]);
+                }
+            }
+        }
+        QVERIFY(strip.save(path));
+        auto clip = QSharedPointer<AnimationClip>::create();
+        QVERIFY(clip->load(path, {130, 130, 130}));
+
+        AnimationPlayer player;
+        int shown = -1;
+        connect(&player, &AnimationPlayer::frameReady, this, [&shown, &colors](const QImage &frame) {
+            if (frame.isNull()) return;
+            const QColor pixel = frame.pixelColor(1, 1);
+            for (int index = 0; index < 3; ++index) {
+                if (pixel == colors[index]) shown = index;
+            }
+        });
+        TypingAnimationDriver driver(&player);
+
+        driver.begin(clip, false);
+        QVERIFY(driver.isPressActive());
+        QCOMPARE(shown, 0);                     // rest: hands on the keyboard
+
+        driver.onKey();
+        QCOMPARE(shown, 1);                     // left paw
+        driver.onKey();
+        QCOMPARE(shown, 2);                     // right paw
+        driver.onKey();
+        QCOMPARE(shown, 1);                     // alternates back
+
+        QTRY_COMPARE_WITH_TIMEOUT(shown, 0, 1000);  // relaxes to rest after the pause
+
+        // The paw alternation carries across a pause rather than restarting, so
+        // resuming after the relax continues with the other paw.
+        driver.onKey();
+        QCOMPARE(shown, 2);
+
+        // Leaving typing disengages: further keys must not move the frame, and a
+        // relax already in flight must not fire either.
+        driver.stop();
+        QVERIFY(!driver.isPressActive());
+        shown = -1;
+        driver.onKey();
+        QCOMPARE(shown, -1);
+        QTest::qWait(200);
+        QCOMPARE(shown, -1);                    // cancelled relax stayed cancelled
+
+        // Reduced motion holds the same rest frame with no per-key motion.
+        driver.begin(clip, true);
+        QVERIFY(!driver.isPressActive());
+        QCOMPARE(shown, 0);
+        shown = -1;
+        driver.onKey();
+        QCOMPARE(shown, -1);
+    }
+
+    void typingDriverFallsBackToTheWorkingRowWithoutAClip()
+    {
+        const QString path = createAtlas(QStringLiteral("typing-fallback"), QColor(9, 9, 9, 255));
+        auto atlas = QSharedPointer<PetAtlas>::create();
+        QVERIFY(atlas->load(path));
+
+        AnimationPlayer player;
+        player.setAtlas(atlas);
+        TypingAnimationDriver driver(&player);
+
+        // No dedicated typing clip: the contract says fall back to the v2 "running"
+        // row, which means active work rather than literal foot-running.
+        driver.begin({}, false);
+        QVERIFY(!driver.isPressActive());
+        QVERIFY(player.isRunning());
         player.stop();
     }
 

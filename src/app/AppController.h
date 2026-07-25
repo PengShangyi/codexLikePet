@@ -6,6 +6,7 @@
 #include <QString>
 #include <QUuid>
 #include <functional>
+#include <memory>
 #include <optional>
 
 #include "pet/BehaviorController.h"
@@ -25,10 +26,12 @@ class AboutWindow;
 class PetLibrary;
 class PetPackageImporter;
 class AtlasCache;
+class ClipCache;
 class AnimationPlayer;
 class AnimationClip;
 class PetAtlas;
 class BehaviorController;
+class TypingAnimationDriver;
 class AppNotifier;
 class QuoteProvider;
 class SpeechBubble;
@@ -105,7 +108,6 @@ private:
     void setTypingMonitoringEnabled(bool enabled);
     void beginTypingAnimation();
     void onTypingKey();
-    void pulseTypingPress();
     void loadCurrentVariant();
     void configurePetPreview();
     void updateResourceSummary();
@@ -117,7 +119,7 @@ private:
     void handleSystemWake();
 
     QSystemTrayIcon *m_trayIcon;
-    QMenu *m_menu;
+    std::unique_ptr<QMenu> m_menu;
     QMenu *m_petMenu;
     QAction *m_visibilityAction;
     QAction *m_settingsAction;
@@ -126,25 +128,26 @@ private:
     QAction *m_quitAction;
     AppSettings *m_settings;
     Localization *m_localization;
-    SettingsWindow *m_settingsWindow;
-    OnboardingWindow *m_onboardingWindow = nullptr;
-    AboutWindow *m_aboutWindow = nullptr;
-    PetWindow *m_petWindow;
+    std::unique_ptr<SettingsWindow> m_settingsWindow;
+    std::unique_ptr<OnboardingWindow> m_onboardingWindow;
+    std::unique_ptr<AboutWindow> m_aboutWindow;
+    std::unique_ptr<PetWindow> m_petWindow;
     PetLibrary *m_petLibrary;
-    PetPackageImporter *m_importer;
-    AtlasCache *m_atlasCache;
+    std::unique_ptr<PetPackageImporter> m_importer;
+    std::unique_ptr<AtlasCache> m_atlasCache;
     AnimationPlayer *m_animationPlayer;
     QSharedPointer<PetAtlas> m_currentAtlas;
-    QHash<QString, QSharedPointer<AnimationClip>> m_clipCache;
+    std::unique_ptr<ClipCache> m_clipCache;
     BehaviorController *m_behavior;
     IdleActivityScheduler *m_idleScheduler;
     std::optional<V2AnimationState> m_activeFidget;
+    // Owned only when we created the default; null when the caller injected one.
+    // The raw members below stay valid either way.
+    std::unique_ptr<AppNotifier> m_ownedNotifier;
     AppNotifier *m_notifier = nullptr;
-    bool m_ownsNotifier = true;
-    bool m_ownsLoginItem = true;
     std::function<bool()> m_systemTrayAvailable;
     QuoteProvider *m_quoteProvider;
-    SpeechBubble *m_speechBubble;
+    std::unique_ptr<SpeechBubble> m_speechBubble;
     InputActivitySource *m_inputSource;
     TypingActivityDetector *m_typingDetector;
     EnvironmentClock *m_environmentClock;
@@ -152,15 +155,12 @@ private:
     std::optional<PetPackage> m_currentPackage;
     SystemActivitySource *m_systemActivity;
     MotionController *m_motionController;
+    std::unique_ptr<LoginItemController> m_ownedLoginItem;
     LoginItemController *m_loginItemController;
     LoginItemCoordinator *m_loginItemCoordinator;
+    // Owns the keystroke-driven typing animation state and its relax timer.
+    TypingAnimationDriver *m_typingDriver;
     QTimer *m_clickCompletionTimer;
-    // Keystroke-driven typing animation: each key advances the held "typing" clip
-    // to a press frame; m_typingReturnTimer relaxes it back to rest after a pause.
-    QTimer *m_typingReturnTimer;
-    bool m_typingPressActive = false;  // true only when a keystroke-driven clip is in use
-    bool m_typingPressToggle = false;  // alternates left/right paw press
-    int m_typingClipFrames = 0;
     bool m_suppressSystemMutations = false;
     bool m_sleeping = false;
     bool m_petVisible = true;

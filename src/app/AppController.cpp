@@ -12,10 +12,13 @@
 #include "pet/AnimationClip.h"
 #include "pet/AtlasCache.h"
 #include "pet/BehaviorController.h"
+#include "pet/ClipCache.h"
+#include "pet/TypingAnimationDriver.h"
 #include "quotes/QuoteProvider.h"
 #include "quotes/SpeechBubble.h"
 #include "resources/PetLibrary.h"
 #include "resources/PetPackageImporter.h"
+#include "resources/PetResourceSummary.h"
 #include "resources/PetStore.h"
 #include "input/MacInputActivitySource.h"
 #include "input/TypingActivityDetector.h"
@@ -66,49 +69,50 @@ AppController::AppController(AppRunMode mode, QObject *parent)
 AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent)
     : QObject(parent)
     , m_trayIcon(new QSystemTrayIcon(this))
-    , m_menu(new QMenu)
+    , m_menu(std::make_unique<QMenu>())
     , m_petMenu(nullptr)
     , m_visibilityAction(nullptr)
     , m_settingsAction(nullptr)
     , m_quitAction(nullptr)
     , m_settings(deps.settings ? deps.settings : new AppSettings(this))
     , m_localization(new Localization(m_settings, this))
-    , m_settingsWindow(new SettingsWindow(m_settings, m_localization))
-    , m_petWindow(new PetWindow(m_settings))
+    , m_settingsWindow(std::make_unique<SettingsWindow>(m_settings, m_localization))
+    , m_petWindow(std::make_unique<PetWindow>(m_settings))
     , m_petLibrary(new PetLibrary(deps.builtInPetRoot, deps.userPetRoot, this))
-    , m_importer(new PetPackageImporter(PetStore()))
-    , m_atlasCache(new AtlasCache(2))
+    , m_importer(std::make_unique<PetPackageImporter>(PetStore()))
+    , m_atlasCache(std::make_unique<AtlasCache>(2))
+    // One environment's clip set is click + typing + three edges; 8 leaves room
+    // for a preview alongside them without growing without bound.
+    , m_clipCache(std::make_unique<ClipCache>(8))
     , m_animationPlayer(new AnimationPlayer(this))
     , m_behavior(new BehaviorController(this))
     , m_idleScheduler(new IdleActivityScheduler(deps.idlePolicy, this))
     , m_quoteProvider(deps.quoteProvider ? deps.quoteProvider : new LocalQuoteProvider(
           [localization = m_localization] { return localization->usesChinese(); },
           this))
-    , m_speechBubble(new SpeechBubble)
+    , m_speechBubble(std::make_unique<SpeechBubble>())
     , m_inputSource(deps.input ? deps.input : new MacInputActivitySource(this))
     , m_typingDetector(new TypingActivityDetector(m_inputSource, 1500, this))
     , m_environmentClock(deps.clock ? deps.clock : new SystemEnvironmentClock(this))
     , m_environmentResolver(new EnvironmentResolver(m_settings, m_environmentClock, this))
     , m_systemActivity(deps.systemActivity ? deps.systemActivity : new MacSystemActivitySource(this))
     , m_motionController(new MotionController(m_settings, m_systemActivity, this))
-    , m_loginItemController(deps.loginItem ? deps.loginItem : new MacLoginItemController)
+    , m_ownedLoginItem(deps.loginItem ? nullptr : std::make_unique<MacLoginItemController>())
+    , m_loginItemController(deps.loginItem ? deps.loginItem : m_ownedLoginItem.get())
     , m_loginItemCoordinator(new LoginItemCoordinator(m_settings, m_loginItemController, this))
+    , m_typingDriver(new TypingAnimationDriver(m_animationPlayer, this))
     , m_clickCompletionTimer(new QTimer(this))
-    , m_typingReturnTimer(new QTimer(this))
     , m_suppressSystemMutations(mode == AppRunMode::RuntimeCheck)
 {
-    m_ownsLoginItem = (deps.loginItem == nullptr);
     m_systemTrayAvailable = deps.systemTrayAvailable
         ? deps.systemTrayAvailable
         : std::function<bool()>([] { return QSystemTrayIcon::isSystemTrayAvailable(); });
-    if (deps.notifier) {
-        m_notifier = deps.notifier;
-        m_ownsNotifier = false;
-    } else {
-        m_notifier = new QtAppNotifier(m_trayIcon, m_settingsWindow);
+    if (!deps.notifier) {
+        m_ownedNotifier = std::make_unique<QtAppNotifier>(m_trayIcon, m_settingsWindow.get());
     }
-    m_onboardingWindow = new OnboardingWindow(m_localization);
-    m_aboutWindow = new AboutWindow(m_localization);
+    m_notifier = deps.notifier ? deps.notifier : m_ownedNotifier.get();
+    m_onboardingWindow = std::make_unique<OnboardingWindow>(m_localization);
+    m_aboutWindow = std::make_unique<AboutWindow>(m_localization);
     const auto applyPetAccessibility = [this] {
         m_petWindow->setAccessibleName(m_localization->text(TextKey::PetAccessibleName));
         m_petWindow->setAccessibleDescription(m_localization->text(TextKey::PetAccessibleDescription));
@@ -122,35 +126,27 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
             m_behavior->finishClickReaction();
         }
     });
-    m_typingReturnTimer->setSingleShot(true);
-    m_typingReturnTimer->setInterval(110);
-    connect(m_typingReturnTimer, &QTimer::timeout, this, [this] {
-        // Relax back to the resting "hands on keyboard" frame after a typing pause.
-        if (m_typingPressActive && m_behavior->state() == BehaviorState::Typing) {
-            m_animationPlayer->showClipFrame(0);
-        }
-    });
-    connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
+    connect(m_settingsWindow.get(), &SettingsWindow::resetPositionRequested, m_petWindow.get(), &PetWindow::resetPosition);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
     connect(m_localization, &Localization::languageChanged, this, &AppController::configurePetPreview);
     // The summary embeds a localized "v2 fallback" label, so it follows language.
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateResourceSummary);
-    connect(m_settingsWindow, &SettingsWindow::petSelected, this, &AppController::selectPet);
-    connect(m_settingsWindow, &SettingsWindow::importPackageRequested, this, [this] { importPet(false); });
-    connect(m_settingsWindow, &SettingsWindow::importDirectoryRequested, this, [this] { importPet(true); });
-    connect(m_settingsWindow, &SettingsWindow::removePetRequested, this, &AppController::removeSelectedPet);
-    connect(m_settingsWindow, &SettingsWindow::previewAtlasSelected, this, &AppController::loadPreviewAtlas);
-    connect(m_settingsWindow, &SettingsWindow::previewClipSelected, this, &AppController::loadPreviewClip);
-    connect(m_settingsWindow, &SettingsWindow::aboutRequested, this, &AppController::showAbout);
-    connect(m_animationPlayer, &AnimationPlayer::frameReady, m_petWindow, &PetWindow::setFrame);
+    connect(m_settingsWindow.get(), &SettingsWindow::petSelected, this, &AppController::selectPet);
+    connect(m_settingsWindow.get(), &SettingsWindow::importPackageRequested, this, [this] { importPet(false); });
+    connect(m_settingsWindow.get(), &SettingsWindow::importDirectoryRequested, this, [this] { importPet(true); });
+    connect(m_settingsWindow.get(), &SettingsWindow::removePetRequested, this, &AppController::removeSelectedPet);
+    connect(m_settingsWindow.get(), &SettingsWindow::previewAtlasSelected, this, &AppController::loadPreviewAtlas);
+    connect(m_settingsWindow.get(), &SettingsWindow::previewClipSelected, this, &AppController::loadPreviewClip);
+    connect(m_settingsWindow.get(), &SettingsWindow::aboutRequested, this, &AppController::showAbout);
+    connect(m_animationPlayer, &AnimationPlayer::frameReady, m_petWindow.get(), &PetWindow::setFrame);
     connect(m_settings, &AppSettings::animationSpeedChanged, m_animationPlayer, &AnimationPlayer::setSpeedFactor);
-    connect(m_petWindow, &PetWindow::dragStarted, m_behavior, &BehaviorController::beginDrag);
-    connect(m_petWindow, &PetWindow::dragStarted, m_speechBubble, &QWidget::hide);
-    connect(m_petWindow, &PetWindow::dragStarted, this, [this] { m_activeQuoteRequest = {}; });
-    connect(m_petWindow, &PetWindow::dragDirectionChanged, m_behavior, &BehaviorController::setDragDirection);
-    connect(m_petWindow, &PetWindow::dragFinished, m_behavior, &BehaviorController::endDrag);
-    connect(m_petWindow, &PetWindow::snapEdgeChanged, m_behavior, &BehaviorController::setSnapEdge);
-    connect(m_petWindow, &PetWindow::clicked, this, &AppController::handlePetClick);
+    connect(m_petWindow.get(), &PetWindow::dragStarted, m_behavior, &BehaviorController::beginDrag);
+    connect(m_petWindow.get(), &PetWindow::dragStarted, m_speechBubble.get(), &QWidget::hide);
+    connect(m_petWindow.get(), &PetWindow::dragStarted, this, [this] { m_activeQuoteRequest = {}; });
+    connect(m_petWindow.get(), &PetWindow::dragDirectionChanged, m_behavior, &BehaviorController::setDragDirection);
+    connect(m_petWindow.get(), &PetWindow::dragFinished, m_behavior, &BehaviorController::endDrag);
+    connect(m_petWindow.get(), &PetWindow::snapEdgeChanged, m_behavior, &BehaviorController::setSnapEdge);
+    connect(m_petWindow.get(), &PetWindow::clicked, this, &AppController::handlePetClick);
     connect(m_behavior, &BehaviorController::stateChanged, this, &AppController::applyBehaviorState);
     connect(m_idleScheduler, &IdleActivityScheduler::fidgetRequested, this, &AppController::playIdleFidget);
     connect(m_animationPlayer, &AnimationPlayer::loopCompleted, this, [this](V2AnimationState state) {
@@ -181,7 +177,7 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
         }
     });
     connect(m_settings, &AppSettings::alwaysOnTopChanged,
-            m_speechBubble, &SpeechBubble::setAlwaysOnTop);
+            m_speechBubble.get(), &SpeechBubble::setAlwaysOnTop);
     connect(m_typingDetector, &TypingActivityDetector::typingChanged, m_behavior, &BehaviorController::setTypingActive);
     // Per-keystroke press. Connected AFTER the detector (which is constructed first),
     // so on each key the detector's transition to the Typing state runs before this
@@ -196,7 +192,7 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
         loadCurrentVariant();
     });
     connect(m_motionController, &MotionController::reducedMotionChanged, m_animationPlayer, &AnimationPlayer::setReducedMotion);
-    connect(m_motionController, &MotionController::reducedMotionChanged, m_settingsWindow, &SettingsWindow::setReducedMotion);
+    connect(m_motionController, &MotionController::reducedMotionChanged, m_settingsWindow.get(), &SettingsWindow::setReducedMotion);
     connect(m_motionController, &MotionController::reducedMotionChanged, this, [this](bool reduced) {
         // A fidget frozen mid-loop by reduced motion would never emit
         // loopCompleted, so drop it and restore the (now static) Idle frame.
@@ -223,17 +219,9 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
 
 AppController::~AppController()
 {
+    // The only teardown step ownership cannot express: the tray icon does not own
+    // its context menu, so it must stop pointing at one we are about to destroy.
     m_trayIcon->setContextMenu(nullptr);
-    delete m_menu;
-    delete m_settingsWindow;
-    delete m_onboardingWindow;
-    delete m_aboutWindow;
-    delete m_petWindow;
-    delete m_importer;
-    delete m_atlasCache;
-    delete m_speechBubble;
-    if (m_ownsLoginItem) delete m_loginItemController;
-    if (m_ownsNotifier) delete m_notifier;
 }
 
 bool AppController::start()
@@ -269,11 +257,11 @@ bool AppController::start()
 
     m_trayIcon->setIcon(makeTrayIcon());
     m_trayIcon->setToolTip(QStringLiteral("Potato"));
-    m_trayIcon->setContextMenu(m_menu);
+    m_trayIcon->setContextMenu(m_menu.get());
     m_trayIcon->show();
     // Right-clicking the pet pops the same menu at the cursor, so the tray icon
     // is a convenience rather than the only entry point.
-    connect(m_petWindow, &PetWindow::contextMenuRequested, this, [this](const QPoint &globalPos) {
+    connect(m_petWindow.get(), &PetWindow::contextMenuRequested, this, [this](const QPoint &globalPos) {
         m_menu->popup(globalPos);
     });
     m_petWindow->restorePosition();
@@ -292,7 +280,7 @@ bool AppController::start()
         m_settings->setOnboardingCompleted(true);
     }
 
-    connect(this, &AppController::petVisibilityRequested, m_petWindow, &QWidget::setVisible);
+    connect(this, &AppController::petVisibilityRequested, m_petWindow.get(), &QWidget::setVisible);
     return true;
 }
 
@@ -381,7 +369,7 @@ void AppController::selectPet(const QString &id)
         m_settingsWindow->setPreviewClipOptions({}, {});
         m_settingsWindow->setResourceSummary({});
         m_currentPackage.reset();
-        m_clipCache.clear();
+        m_clipCache->clear();
         return;
     }
     m_settings->setSelectedPetId(id);
@@ -409,7 +397,7 @@ void AppController::loadCurrentVariant()
         return;
     }
     m_currentAtlas = atlas;
-    m_clipCache.clear();
+    m_clipCache->clear();
     m_animationPlayer->setAtlas(atlas);
     m_petWindow->setSmoothRendering(m_currentPackage->renderMode == RenderMode::Smooth);
     m_behavior->setSnapEdge(m_petWindow->snapEdge());
@@ -466,34 +454,11 @@ void AppController::configurePetPreview()
 void AppController::updateResourceSummary()
 {
     if (!m_currentPackage) return;
-    QStringList summary;
-    const QVector<Season> seasons{Season::Spring, Season::Summer, Season::Autumn, Season::Winter};
-    const QVector<TimePhase> phases{TimePhase::Day, TimePhase::Night};
-    const QStringList clipNames{QStringLiteral("click"),
-                                QStringLiteral("typing"),
-                                QStringLiteral("edge-left"),
-                                QStringLiteral("edge-right"),
-                                QStringLiteral("edge-bottom")};
     const QString builtInFallback = m_localization->usesChinese()
         ? QStringLiteral("v2 内置回退")
         : QStringLiteral("v2 fallback");
-    for (const Season season : seasons) {
-        for (const TimePhase phase : phases) {
-            const VariantKey key{season, phase};
-            QStringList clipSummary;
-            for (const QString &clipName : clipNames) {
-                const auto clip = EnvironmentResolver::clipDefinition(*m_currentPackage, key, clipName);
-                clipSummary.append(QStringLiteral("%1=%2")
-                                       .arg(clipName,
-                                            clip ? clip->path : builtInFallback));
-            }
-            summary.append(QStringLiteral("%1 → %2\n  %3")
-                               .arg(key.combinedName(),
-                                    EnvironmentResolver::atlasRelativePath(*m_currentPackage, key),
-                                    clipSummary.join(QStringLiteral("; "))));
-        }
-    }
-    m_settingsWindow->setResourceSummary(summary.join(QLatin1Char('\n')));
+    m_settingsWindow->setResourceSummary(
+        PetResourceSummary::build(*m_currentPackage, builtInFallback));
 }
 
 void AppController::loadPreviewAtlas(const QString &relativePath)
@@ -542,20 +507,8 @@ QSharedPointer<AnimationClip> AppController::loadClip(const QString &name)
         name);
     if (!definition) return {};
 
-    const QString path = QDir(m_currentPackage->rootPath).absoluteFilePath(definition->path);
-    QStringList durationParts;
-    durationParts.reserve(definition->durationsMs.size());
-    for (const int duration : definition->durationsMs) {
-        durationParts.append(QString::number(duration));
-    }
-    const QString cacheKey = path + QLatin1Char('|') + durationParts.join(QLatin1Char(','));
-    const auto cached = m_clipCache.constFind(cacheKey);
-    if (cached != m_clipCache.cend()) return *cached;
-
-    auto clip = QSharedPointer<AnimationClip>::create();
-    if (!clip->load(path, definition->durationsMs)) return {};
-    m_clipCache.insert(cacheKey, clip);
-    return clip;
+    return m_clipCache->load(QDir(m_currentPackage->rootPath).absoluteFilePath(definition->path),
+                             definition->durationsMs);
 }
 
 bool AppController::playClip(const QString &name, bool restart)
@@ -569,44 +522,18 @@ bool AppController::playClip(const QString &name, bool restart)
 
 void AppController::beginTypingAnimation()
 {
-    const QSharedPointer<AnimationClip> clip = loadClip(QStringLiteral("typing"));
-    if (clip) {
-        // Keystroke-driven: hold the clip on its resting frame and let each key
-        // advance a press (onTypingKey/pulseTypingPress) instead of free-running.
-        m_typingClipFrames = clip->frameCount();
-        m_animationPlayer->setClip(clip, QStringLiteral("typing"), true);
-        m_animationPlayer->showClipFrame(0);  // rest: hands on the keyboard (stops the timer)
-        // Reduced motion holds that static rest frame with no per-key motion.
-        m_typingPressActive = !m_motionController->reducedMotion() && m_typingClipFrames >= 2;
-        m_typingReturnTimer->stop();
-        return;
-    }
-    // No dedicated typing clip: fall back to the v2 "running" row, defined by the
-    // contract as "active task work or processing, not literal foot-running"
-    // (hatch-pet/references/animation-rows.md) — a clearly-distinct working loop.
-    m_typingPressActive = false;
-    m_animationPlayer->setState(V2AnimationState::Running);
-    m_animationPlayer->start();
-}
-
-void AppController::pulseTypingPress()
-{
-    if (m_typingClipFrames < 2) return;
-    // Alternate press frames when the clip provides them (1 = left paw, 2 = right);
-    // a 2-frame clip just toggles rest/press.
-    m_typingPressToggle = !m_typingPressToggle;
-    const int press = m_typingClipFrames >= 3 ? (m_typingPressToggle ? 1 : 2) : 1;
-    m_animationPlayer->showClipFrame(press);
-    m_typingReturnTimer->start();  // relax back to rest after a short pause
+    m_typingDriver->begin(loadClip(QStringLiteral("typing")),
+                          m_motionController->reducedMotion());
 }
 
 void AppController::onTypingKey()
 {
-    // One key = one paw press. Gated so it animates only during Typing and touches
-    // nothing but the in-memory frame index (no key content is ever involved).
-    if (!m_typingPressActive || m_sleeping || !m_petVisible) return;
+    // One key = one paw press. Gated so it animates only while the pet is actually
+    // typing on screen; the driver moves nothing but an in-memory frame index (no
+    // key content is ever involved).
+    if (m_sleeping || !m_petVisible) return;
     if (m_behavior->state() != BehaviorState::Typing) return;
-    pulseTypingPress();
+    m_typingDriver->onKey();
 }
 
 void AppController::applyBehaviorState(BehaviorState state)
@@ -615,10 +542,7 @@ void AppController::applyBehaviorState(BehaviorState state)
     // Any higher-priority behavior interrupts and clears an in-flight fidget.
     if (state != BehaviorState::Idle) m_activeFidget.reset();
     // Leaving Typing stops the keystroke-driven press machinery.
-    if (state != BehaviorState::Typing) {
-        m_typingPressActive = false;
-        m_typingReturnTimer->stop();
-    }
+    if (state != BehaviorState::Typing) m_typingDriver->stop();
     if (!m_currentAtlas || !m_petVisible || m_sleeping) {
         m_animationPlayer->stop();
         updateIdleScheduler();
@@ -710,7 +634,7 @@ bool AppController::isIdleFidgetArmed() const
 
 bool AppController::isTypingPressActive() const
 {
-    return m_typingPressActive;
+    return m_typingDriver->isPressActive();
 }
 
 void AppController::handlePetClick()
@@ -731,9 +655,9 @@ void AppController::handlePetClick()
 void AppController::importPet(bool directory)
 {
     const QString path = directory
-        ? QFileDialog::getExistingDirectory(m_settingsWindow,
+        ? QFileDialog::getExistingDirectory(m_settingsWindow.get(),
                                             m_localization->text(TextKey::ImportDirectory))
-        : QFileDialog::getOpenFileName(m_settingsWindow,
+        : QFileDialog::getOpenFileName(m_settingsWindow.get(),
                                        m_localization->text(TextKey::ImportPackage),
                                        {},
                                        QStringLiteral("Potato Pet (*.potatopet)"));

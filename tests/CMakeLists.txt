@@ -37,10 +37,31 @@ qt_add_executable(potato_atlas_test
     ../src/pet/PetAtlas.h
     ../src/pet/AtlasCache.cpp
     ../src/pet/AtlasCache.h
+    ../src/pet/ClipCache.cpp
+    ../src/pet/ClipCache.h
+    ../src/pet/TypingAnimationDriver.cpp
+    ../src/pet/TypingAnimationDriver.h
 )
 target_include_directories(potato_atlas_test PRIVATE ../src)
 target_link_libraries(potato_atlas_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME potato_atlas_test COMMAND potato_atlas_test)
+
+qt_add_executable(potato_resource_summary_test
+    test_resource_summary.cpp
+    ../src/resources/PetResourceSummary.cpp
+    ../src/resources/PetResourceSummary.h
+    ../src/resources/PetPackage.cpp
+    ../src/resources/PetPackage.h
+    ../src/environment/EnvironmentResolver.cpp
+    ../src/environment/EnvironmentResolver.h
+    ../src/environment/EnvironmentState.cpp
+    ../src/environment/EnvironmentState.h
+    ../src/settings/AppSettings.cpp
+    ../src/settings/AppSettings.h
+)
+target_include_directories(potato_resource_summary_test PRIVATE ../src)
+target_link_libraries(potato_resource_summary_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME potato_resource_summary_test COMMAND potato_resource_summary_test)
 
 qt_add_executable(potato_package_policy_test
     test_package_policy.cpp
@@ -314,6 +335,10 @@ qt_add_executable(potato_app_controller_test
     ../src/pet/IdleActivityScheduler.h
     ../src/pet/AtlasCache.cpp
     ../src/pet/AtlasCache.h
+    ../src/pet/ClipCache.cpp
+    ../src/pet/ClipCache.h
+    ../src/pet/TypingAnimationDriver.cpp
+    ../src/pet/TypingAnimationDriver.h
     ../src/pet/PetAtlas.cpp
     ../src/pet/PetAtlas.h
     ../src/pet/WindowPlacement.cpp
@@ -334,6 +359,8 @@ qt_add_executable(potato_app_controller_test
     ../src/resources/PetStore.h
     ../src/resources/PetLibrary.cpp
     ../src/resources/PetLibrary.h
+    ../src/resources/PetResourceSummary.cpp
+    ../src/resources/PetResourceSummary.h
     ../src/quotes/QuoteProvider.cpp
     ../src/quotes/QuoteProvider.h
     ../src/quotes/SpeechBubble.cpp
