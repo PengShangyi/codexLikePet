@@ -6,19 +6,29 @@ Localization::Localization(AppSettings *settings, QObject *parent)
     : QObject(parent)
     , m_settings(settings)
 {
-    connect(settings, &AppSettings::languageChanged, this, [this] { emit languageChanged(); });
+    refreshLanguage();
+    connect(settings, &AppSettings::languageChanged, this, [this] {
+        refreshLanguage();  // before re-emitting, so slots read the new language
+        emit languageChanged();
+    });
+}
+
+void Localization::refreshLanguage()
+{
+    const AppLanguage language = m_settings->language();
+    m_usesChinese = language == AppLanguage::SimplifiedChinese
+        || (language == AppLanguage::System
+            && QLocale::system().language() == QLocale::Chinese);
 }
 
 bool Localization::usesChinese() const
 {
-    if (m_settings->language() == AppLanguage::SimplifiedChinese) return true;
-    if (m_settings->language() == AppLanguage::English) return false;
-    return QLocale::system().language() == QLocale::Chinese;
+    return m_usesChinese;
 }
 
 QString Localization::text(TextKey key) const
 {
-    const bool zh = usesChinese();
+    const bool zh = m_usesChinese;
     switch (key) {
     case TextKey::ShowPet: return zh ? QStringLiteral("显示宠物") : QStringLiteral("Show Pet");
     case TextKey::HidePet: return zh ? QStringLiteral("隐藏宠物") : QStringLiteral("Hide Pet");

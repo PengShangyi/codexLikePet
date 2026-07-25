@@ -68,11 +68,6 @@ QString PetAtlas::filePath() const
     return m_filePath;
 }
 
-qsizetype PetAtlas::decodedByteCount() const
-{
-    return m_image.sizeInBytes();
-}
-
 QImage PetAtlas::frame(V2AnimationState state, int frameIndex) const
 {
     if (!isValid()) {

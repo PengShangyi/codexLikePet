@@ -52,22 +52,10 @@ PetWindow::PetWindow(AppSettings *settings, QWidget *parent)
     });
 }
 
-double PetWindow::scaleFactor() const
-{
-    return m_scaleFactor;
-}
-
-bool PetWindow::isAlwaysOnTop() const
-{
-    return m_alwaysOnTop;
-}
-
 SnapEdge PetWindow::snapEdge() const
 {
     return m_snapEdge;
 }
-
-bool PetWindow::usesSmoothRendering() const { return m_smoothRendering; }
 
 void PetWindow::setFrame(const QImage &frame)
 {

@@ -41,5 +41,12 @@ signals:
     void languageChanged();
 
 private:
+    void refreshLanguage();
+
     AppSettings *m_settings;
+    // Cached because text() is called once per string and a full retranslate()
+    // asks for around seventy of them; resolving it each time meant that many
+    // QSettings reads plus system-locale lookups. Refreshed whenever the language
+    // preference changes, before languageChanged is re-emitted.
+    bool m_usesChinese = false;
 };

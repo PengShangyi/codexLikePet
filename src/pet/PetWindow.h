@@ -21,10 +21,7 @@ public:
 
     explicit PetWindow(AppSettings *settings, QWidget *parent = nullptr);
 
-    double scaleFactor() const;
-    bool isAlwaysOnTop() const;
     SnapEdge snapEdge() const;
-    bool usesSmoothRendering() const;
     void setFrame(const QImage &frame);
     void setSmoothRendering(bool smooth);
 

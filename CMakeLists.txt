@@ -33,6 +33,75 @@ endif()
 
 qt_standard_project_setup(REQUIRES 6.8)
 
+# Shared static libraries for the low-level modules.
+#
+# Tests deliberately link only the sources under test, which meant the same file
+# was listed by several targets and recompiled once per target: a clean build
+# produced 203 object files for 68 distinct sources. These libraries cover the
+# clusters where that duplication was concentrated, so each is compiled once and
+# every consumer links the same objects.
+#
+# Only cohesive, low-level groups are libraries. Anything that pulls in a system
+# framework stays out, so a test still links the pure C++ half of a boundary
+# without the macOS half -- WindowOverlay (policy) is a library while
+# MacWindowOverlay.mm (which applies it) is not. Note also that Qt's AUTOMOC
+# emits one moc object per target, so a library's Q_OBJECT classes link as a
+# unit; these groups are only ever used together.
+function(potato_add_library name)
+    cmake_parse_arguments(ARG "" "" "SOURCES;LINK" ${ARGN})
+    add_library(${name} STATIC ${ARG_SOURCES})
+    target_include_directories(${name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_options(${name} PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_libraries(${name} PUBLIC ${ARG_LINK})
+endfunction()
+
+potato_add_library(potato_settings_core
+    SOURCES src/settings/AppSettings.cpp src/settings/AppSettings.h
+            src/settings/Localization.cpp src/settings/Localization.h
+    LINK Qt6::Core)
+
+potato_add_library(potato_environment
+    SOURCES src/environment/EnvironmentClock.cpp src/environment/EnvironmentClock.h
+            src/environment/EnvironmentResolver.cpp src/environment/EnvironmentResolver.h
+            src/environment/EnvironmentState.cpp src/environment/EnvironmentState.h
+    LINK Qt6::Core potato_settings_core)
+
+potato_add_library(potato_geometry
+    SOURCES src/pet/WindowPlacement.cpp src/pet/WindowPlacement.h
+            src/pet/PetGesture.cpp src/pet/PetGesture.h
+    LINK Qt6::Core Qt6::Gui)
+
+potato_add_library(potato_atlas
+    SOURCES src/pet/PetAtlas.cpp src/pet/PetAtlas.h
+            src/pet/AnimationClip.cpp src/pet/AnimationClip.h
+            src/pet/ClipContract.h
+    LINK Qt6::Core Qt6::Gui)
+
+potato_add_library(potato_policy
+    SOURCES src/resources/PackagePolicy.cpp src/resources/PackagePolicy.h
+    LINK Qt6::Core)
+
+potato_add_library(potato_package
+    SOURCES src/resources/PetPackage.cpp src/resources/PetPackage.h
+            src/resources/PetPackageValidator.cpp src/resources/PetPackageValidator.h
+            src/resources/PetStore.cpp src/resources/PetStore.h
+    LINK Qt6::Core Qt6::Gui potato_policy potato_atlas)
+
+# The pure C++ half of the always-on-top boundary; MacWindowOverlay.mm applies it.
+potato_add_library(potato_overlay
+    SOURCES src/platform/WindowOverlay.cpp src/platform/WindowOverlay.h
+    LINK Qt6::Core)
+
+set(POTATO_LIBRARIES
+    potato_settings_core
+    potato_environment
+    potato_geometry
+    potato_atlas
+    potato_policy
+    potato_package
+    potato_overlay
+)
+
 qt_add_executable(Potato MACOSX_BUNDLE
     src/main.cpp
     src/app/AppController.cpp
@@ -41,10 +110,6 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/app/AppNotifier.h
     src/app/SingleInstance.cpp
     src/app/SingleInstance.h
-    src/settings/AppSettings.cpp
-    src/settings/AppSettings.h
-    src/settings/Localization.cpp
-    src/settings/Localization.h
     src/settings/SettingsWindow.cpp
     src/settings/SettingsWindow.h
     src/settings/OnboardingWindow.cpp
@@ -55,8 +120,6 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/pet/PetWindow.h
     src/pet/AnimationPlayer.cpp
     src/pet/AnimationPlayer.h
-    src/pet/AnimationClip.cpp
-    src/pet/AnimationClip.h
     src/pet/BehaviorController.cpp
     src/pet/BehaviorController.h
     src/pet/IdleActivityScheduler.cpp
@@ -67,23 +130,12 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/pet/ClipCache.h
     src/pet/TypingAnimationDriver.cpp
     src/pet/TypingAnimationDriver.h
-    src/pet/PetAtlas.cpp
-    src/pet/PetAtlas.h
-    src/pet/ClipContract.h
-    src/resources/PackagePolicy.cpp
-    src/resources/PackagePolicy.h
-    src/resources/PetPackage.cpp
-    src/resources/PetPackage.h
     src/resources/PetResourceSummary.cpp
     src/resources/PetResourceSummary.h
-    src/resources/PetPackageValidator.cpp
-    src/resources/PetPackageValidator.h
     src/resources/ArchiveExtractor.cpp
     src/resources/ArchiveExtractor.h
     src/resources/PetPackageImporter.cpp
     src/resources/PetPackageImporter.h
-    src/resources/PetStore.cpp
-    src/resources/PetStore.h
     src/resources/PetLibrary.cpp
     src/resources/PetLibrary.h
     src/settings/PetPreviewWidget.cpp
@@ -97,12 +149,6 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/input/MacInputActivitySource.mm
     src/input/TypingActivityDetector.cpp
     src/input/TypingActivityDetector.h
-    src/environment/EnvironmentClock.cpp
-    src/environment/EnvironmentClock.h
-    src/environment/EnvironmentResolver.cpp
-    src/environment/EnvironmentResolver.h
-    src/environment/EnvironmentState.cpp
-    src/environment/EnvironmentState.h
     src/accessibility/MotionController.cpp
     src/accessibility/MotionController.h
     src/platform/SystemActivitySource.h
@@ -113,14 +159,8 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/login/LoginItemCoordinator.h
     src/login/MacLoginItemController.h
     src/login/MacLoginItemController.mm
-    src/pet/WindowPlacement.cpp
-    src/pet/WindowPlacement.h
-    src/pet/PetGesture.cpp
-    src/pet/PetGesture.h
     src/platform/MacApplication.h
     src/platform/MacApplication.mm
-    src/platform/WindowOverlay.h
-    src/platform/WindowOverlay.cpp
     src/platform/MacWindowOverlay.mm
 )
 
@@ -129,6 +169,7 @@ target_compile_options(Potato PRIVATE -Wall -Wextra -Wpedantic)
 target_compile_definitions(Potato PRIVATE POTATO_VERSION="${PROJECT_VERSION}")
 
 target_link_libraries(Potato PRIVATE
+    ${POTATO_LIBRARIES}
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets

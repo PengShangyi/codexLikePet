@@ -39,7 +39,6 @@ public:
     bool isValid() const;
     QString errorString() const;
     QString filePath() const;
-    qsizetype decodedByteCount() const;
 
     QImage frame(V2AnimationState state, int frameIndex) const;
     QImage lookFrame(int clockwiseIndex) const;

@@ -46,6 +46,34 @@ private slots:
         QCOMPARE(localization.text(TextKey::ShowPet), QStringLiteral("显示宠物"));
     }
 
+    // The resolved language is cached, so text() does not re-read QSettings for
+    // each of the ~70 strings a retranslate asks for. The cache must be refreshed
+    // before languageChanged is emitted: every retranslate slot in the app reads
+    // text() from inside that signal and would otherwise get the previous
+    // language for one cycle.
+    void languageChangedSlotsSeeTheNewLanguage()
+    {
+        QTemporaryDir temp;
+        AppSettings settings(temp.filePath(QStringLiteral("settings.ini")));
+        settings.setLanguage(AppLanguage::English);
+        Localization localization(&settings);
+        QVERIFY(!localization.usesChinese());
+
+        QStringList observed;
+        connect(&localization, &Localization::languageChanged, &localization, [&] {
+            observed.append(localization.text(TextKey::ShowPet));
+        });
+
+        settings.setLanguage(AppLanguage::SimplifiedChinese);
+        QCOMPARE(observed, QStringList{QStringLiteral("显示宠物")});
+        QVERIFY(localization.usesChinese());
+
+        settings.setLanguage(AppLanguage::English);
+        QCOMPARE(observed.size(), 2);
+        QCOMPARE(observed.last(), QStringLiteral("Show Pet"));
+        QVERIFY(!localization.usesChinese());
+    }
+
     void migratesLegacyKeysAndRecoversInvalidTimes()
     {
         QTemporaryDir temp;
