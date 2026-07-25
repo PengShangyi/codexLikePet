@@ -33,6 +33,21 @@ endif()
 
 qt_standard_project_setup(REQUIRES 6.8)
 
+# Address + undefined-behavior sanitizers, for the lifetime-sensitive code paths:
+# atlas and clip frames are handed out as QImage views over pixels owned by a
+# QSharedPointer, so a dropped refcount is a use-after-free rather than a visibly
+# wrong picture. Off by default -- it roughly halves test throughput.
+#
+# Deliberately NOT paired with ASAN_OPTIONS=detect_leaks=1: LeakSanitizer is not
+# supported on Darwin/arm64. Leak checking is scripts/check-leaks.sh, which drives
+# the platform's own leaks(1).
+option(POTATO_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+if(POTATO_SANITIZE)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer
+                        -fno-sanitize-recover=undefined)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 # Shared static libraries for the low-level modules.
 #
 # Tests deliberately link only the sources under test, which meant the same file

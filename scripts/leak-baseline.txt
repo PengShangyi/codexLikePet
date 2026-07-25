@@ -1,0 +1,27 @@
+# Recorded by scripts/check-leaks.sh --update.
+# Qt keeps singletons alive to process exit, so these are ceilings, not
+# targets. A rise is ours to explain; review any diff here carefully.
+potato_app_controller_test 0
+potato_atlas_test 0
+potato_behavior_test 0
+potato_builtin_pet_test 0
+potato_environment_test 0
+potato_idle_scheduler_test 0
+potato_library_test 0
+potato_login_item_test 0
+potato_motion_test 0
+potato_package_importer_test 0
+potato_package_policy_test 0
+potato_package_validator_test 0
+potato_pet_gesture_test 0
+potato_pet_overlay_test 0
+potato_resource_summary_test 0
+potato_settings_test 0
+potato_settings_window_test 0
+potato_single_instance_test 0
+potato_smoke_test 0
+potato_theme_test 0
+potato_typing_activity_test 0
+potato_ui_kit_test 0
+potato_window_overlay_test 0
+potato_window_placement_test 0
