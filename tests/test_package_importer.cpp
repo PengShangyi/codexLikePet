@@ -2,6 +2,7 @@
 #include "resources/PetPackageImporter.h"
 #include "resources/PetPackageValidator.h"
 #include "resources/ArchiveExtractor.h"
+#include "support/AtlasFixture.h"
 
 #include <QDir>
 #include <QFile>
@@ -18,19 +19,7 @@ class PackageImporterTest final : public QObject
 
     static bool createPackage(const QString &root)
     {
-        QImage image(PetAtlas::Width, PetAtlas::Height, QImage::Format_RGBA8888);
-        image.fill(Qt::transparent);
-        for (int row = 0; row < PetAtlas::Rows; ++row) {
-            const int columns = row <= 8
-                ? PetAtlas::animationSpec(static_cast<V2AnimationState>(row)).frameCount
-                : 8;
-            for (int column = 0; column < columns; ++column) {
-                image.setPixelColor(column * PetAtlas::CellWidth + 1,
-                                    row * PetAtlas::CellHeight + 1,
-                                    Qt::white);
-            }
-        }
-        if (!image.save(QDir(root).filePath(QStringLiteral("spritesheet.png")))) {
+        if (!TestAtlas::writeValid(QDir(root).filePath(QStringLiteral("spritesheet.png")))) {
             return false;
         }
         QFile manifest(QDir(root).filePath(QStringLiteral("pet.json")));

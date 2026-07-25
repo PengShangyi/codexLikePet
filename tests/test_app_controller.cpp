@@ -8,6 +8,7 @@
 #include "platform/SystemActivitySource.h"
 #include "settings/AppSettings.h"
 #include "settings/SettingsWindow.h"
+#include "support/AtlasFixture.h"
 
 #include <QAction>
 #include <QApplication>
@@ -112,16 +113,7 @@ class AppControllerTest final : public QObject
     {
         const QString directory = QDir(root).filePath(id);
         if (!QDir().mkpath(directory)) return false;
-        QImage image(PetAtlas::Width, PetAtlas::Height, QImage::Format_RGBA8888);
-        image.fill(Qt::transparent);
-        for (int row = 0; row < PetAtlas::Rows; ++row) {
-            const int columns = row <= 8
-                ? PetAtlas::animationSpec(static_cast<V2AnimationState>(row)).frameCount
-                : 8;
-            for (int column = 0; column < columns; ++column)
-                image.setPixelColor(column * 192 + 1, row * 208 + 1, Qt::white);
-        }
-        if (!image.save(QDir(directory).filePath(QStringLiteral("spritesheet.png")))) return false;
+        if (!TestAtlas::writeValid(QDir(directory).filePath(QStringLiteral("spritesheet.png")))) return false;
 
         QJsonObject manifest{
             {QStringLiteral("id"), id},

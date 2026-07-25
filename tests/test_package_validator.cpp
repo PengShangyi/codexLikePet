@@ -1,5 +1,6 @@
 #include "pet/PetAtlas.h"
 #include "resources/PetPackageValidator.h"
+#include "support/AtlasFixture.h"
 
 #include <QDir>
 #include <QFile>
@@ -20,22 +21,7 @@ class PackageValidatorTest final : public QObject
             && file.write(QJsonDocument(object).toJson()) > 0;
     }
 
-    static bool writeValidAtlas(const QString &path)
-    {
-        QImage image(PetAtlas::Width, PetAtlas::Height, QImage::Format_RGBA8888);
-        image.fill(Qt::transparent);
-        for (int row = 0; row < PetAtlas::Rows; ++row) {
-            const int columns = row <= 8
-                ? PetAtlas::animationSpec(static_cast<V2AnimationState>(row)).frameCount
-                : 8;
-            for (int column = 0; column < columns; ++column) {
-                image.setPixelColor(column * PetAtlas::CellWidth + 10,
-                                    row * PetAtlas::CellHeight + 10,
-                                    QColor(100, 70, 40, 255));
-            }
-        }
-        return image.save(path);
-    }
+    static bool writeValidAtlas(const QString &path) { return TestAtlas::writeValid(path); }
 
     static QJsonObject validPetManifest()
     {

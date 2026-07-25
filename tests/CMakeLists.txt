@@ -36,8 +36,10 @@ qt_add_executable(potato_atlas_test
     ../src/pet/ClipCache.h
     ../src/pet/TypingAnimationDriver.cpp
     ../src/pet/TypingAnimationDriver.h
+    support/AtlasFixture.cpp
+    support/AtlasFixture.h
 )
-target_include_directories(potato_atlas_test PRIVATE ../src)
+target_include_directories(potato_atlas_test PRIVATE ../src .)
 target_link_libraries(potato_atlas_test PRIVATE potato_atlas
     Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME potato_atlas_test COMMAND potato_atlas_test)
@@ -62,8 +64,10 @@ add_test(NAME potato_package_policy_test COMMAND potato_package_policy_test)
 
 qt_add_executable(potato_package_validator_test
     test_package_validator.cpp
+    support/AtlasFixture.cpp
+    support/AtlasFixture.h
 )
-target_include_directories(potato_package_validator_test PRIVATE ../src)
+target_include_directories(potato_package_validator_test PRIVATE ../src .)
 target_link_libraries(potato_package_validator_test PRIVATE potato_atlas potato_package potato_policy
     Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME potato_package_validator_test COMMAND potato_package_validator_test)
@@ -85,8 +89,10 @@ qt_add_executable(potato_package_importer_test
     ../src/resources/ArchiveExtractor.h
     ../src/resources/PetPackageImporter.cpp
     ../src/resources/PetPackageImporter.h
+    support/AtlasFixture.cpp
+    support/AtlasFixture.h
 )
-target_include_directories(potato_package_importer_test PRIVATE ../src)
+target_include_directories(potato_package_importer_test PRIVATE ../src .)
 target_link_libraries(potato_package_importer_test PRIVATE potato_atlas potato_package potato_policy
     Qt6::Core Qt6::Gui Qt6::Test miniz)
 add_test(NAME potato_package_importer_test COMMAND potato_package_importer_test)
@@ -143,8 +149,10 @@ qt_add_executable(potato_library_test
     test_library.cpp
     ../src/resources/PetLibrary.cpp
     ../src/resources/PetLibrary.h
+    support/AtlasFixture.cpp
+    support/AtlasFixture.h
 )
-target_include_directories(potato_library_test PRIVATE ../src)
+target_include_directories(potato_library_test PRIVATE ../src .)
 target_link_libraries(potato_library_test PRIVATE potato_atlas potato_package potato_policy
     Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME potato_library_test COMMAND potato_library_test)
@@ -307,8 +315,10 @@ qt_add_executable(potato_app_controller_test
     ../src/login/LoginItemCoordinator.h
     ../src/login/MacLoginItemController.mm
     ../src/login/MacLoginItemController.h
+    support/AtlasFixture.cpp
+    support/AtlasFixture.h
 )
-target_include_directories(potato_app_controller_test PRIVATE ../src)
+target_include_directories(potato_app_controller_test PRIVATE ../src .)
 target_compile_definitions(potato_app_controller_test PRIVATE
     POTATO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )

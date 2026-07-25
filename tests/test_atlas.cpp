@@ -4,6 +4,7 @@
 #include "pet/ClipCache.h"
 #include "pet/PetAtlas.h"
 #include "pet/TypingAnimationDriver.h"
+#include "support/AtlasFixture.h"
 
 #include <QTemporaryDir>
 #include <QSignalSpy>
@@ -17,12 +18,7 @@ private:
     QString createAtlas(const QString &name, const QColor &color)
     {
         const QString path = m_temp.filePath(name + QStringLiteral(".png"));
-        QImage image(PetAtlas::Width, PetAtlas::Height, QImage::Format_RGBA8888);
-        image.fill(color);
-        if (!image.save(path)) {
-            return {};
-        }
-        return path;
+        return TestAtlas::writeFilled(path, color) ? path : QString();
     }
 
 private slots:
@@ -82,11 +78,7 @@ private slots:
     {
         const auto strip = [this](const QString &name, int frames) {
             const QString path = m_temp.filePath(name + QStringLiteral(".png"));
-            QImage image(PetAtlas::CellWidth * frames,
-                         PetAtlas::CellHeight,
-                         QImage::Format_RGBA8888);
-            image.fill(QColor(10, 20, 30, 200));
-            return image.save(path) ? path : QString();
+            return TestAtlas::writeClip(path, frames, QColor(10, 20, 30, 200)) ? path : QString();
         };
         const QString first = strip(QStringLiteral("cc-first"), 2);
         const QString second = strip(QStringLiteral("cc-second"), 2);
@@ -127,11 +119,7 @@ private slots:
     void loadsAndPlaysAnExtensionClip()
     {
         const QString path = m_temp.filePath(QStringLiteral("clip.png"));
-        QImage strip(PetAtlas::CellWidth * 2,
-                     PetAtlas::CellHeight,
-                     QImage::Format_RGBA8888);
-        strip.fill(QColor(20, 40, 60, 180));
-        QVERIFY(strip.save(path));
+        QVERIFY(TestAtlas::writeClip(path, 2, QColor(20, 40, 60, 180)));
 
         auto clip = QSharedPointer<AnimationClip>::create();
         QVERIFY(clip->load(path, {50, 50}));
@@ -156,9 +144,7 @@ private slots:
     void repeatedSpeedChangesDoNotStallPlayback()
     {
         const QString path = m_temp.filePath(QStringLiteral("speed-clip.png"));
-        QImage strip(PetAtlas::CellWidth * 2, PetAtlas::CellHeight, QImage::Format_RGBA8888);
-        strip.fill(QColor(30, 90, 120, 200));
-        QVERIFY(strip.save(path));
+        QVERIFY(TestAtlas::writeClip(path, 2, QColor(30, 90, 120, 200)));
         auto clip = QSharedPointer<AnimationClip>::create();
         QVERIFY(clip->load(path, {50, 50}));
 
@@ -183,17 +169,8 @@ private slots:
     void typingDriverAlternatesPawsAndRelaxesToRest()
     {
         const QString path = m_temp.filePath(QStringLiteral("typing3.png"));
-        QImage strip(PetAtlas::CellWidth * 3, PetAtlas::CellHeight, QImage::Format_RGBA8888);
-        strip.fill(Qt::transparent);
         const QColor colors[3] = {QColor(10, 0, 0, 255), QColor(0, 10, 0, 255), QColor(0, 0, 10, 255)};
-        for (int frame = 0; frame < 3; ++frame) {
-            for (int x = 0; x < PetAtlas::CellWidth; ++x) {
-                for (int y = 0; y < PetAtlas::CellHeight; ++y) {
-                    strip.setPixelColor(frame * PetAtlas::CellWidth + x, y, colors[frame]);
-                }
-            }
-        }
-        QVERIFY(strip.save(path));
+        QVERIFY(TestAtlas::writeClipFrames(path, {colors[0], colors[1], colors[2]}));
         auto clip = QSharedPointer<AnimationClip>::create();
         QVERIFY(clip->load(path, {130, 130, 130}));
 
@@ -266,11 +243,7 @@ private slots:
     void reducedMotionKeepsAnExtensionClipOnItsRepresentativeFrame()
     {
         const QString path = m_temp.filePath(QStringLiteral("reduced-clip.png"));
-        QImage strip(PetAtlas::CellWidth,
-                     PetAtlas::CellHeight,
-                     QImage::Format_RGBA8888);
-        strip.fill(QColor(80, 60, 40, 180));
-        QVERIFY(strip.save(path));
+        QVERIFY(TestAtlas::writeClip(path, 1, QColor(80, 60, 40, 180)));
         auto clip = QSharedPointer<AnimationClip>::create();
         QVERIFY(clip->load(path, {50}));
 

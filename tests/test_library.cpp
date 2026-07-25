@@ -1,5 +1,6 @@
 #include "pet/PetAtlas.h"
 #include "resources/PetLibrary.h"
+#include "support/AtlasFixture.h"
 
 #include <QDir>
 #include <QFile>
@@ -16,13 +17,7 @@ class LibraryTest final : public QObject
     {
         const QString directory = QDir(root).filePath(id);
         if (!QDir().mkpath(directory)) return false;
-        QImage image(PetAtlas::Width, PetAtlas::Height, QImage::Format_RGBA8888);
-        image.fill(Qt::transparent);
-        for (int row = 0; row < PetAtlas::Rows; ++row) {
-            const int columns = row <= 8 ? PetAtlas::animationSpec(static_cast<V2AnimationState>(row)).frameCount : 8;
-            for (int column = 0; column < columns; ++column) image.setPixelColor(column * 192 + 1, row * 208 + 1, Qt::white);
-        }
-        if (!image.save(QDir(directory).filePath(QStringLiteral("spritesheet.png")))) return false;
+        if (!TestAtlas::writeValid(QDir(directory).filePath(QStringLiteral("spritesheet.png")))) return false;
         QFile file(QDir(directory).filePath(QStringLiteral("pet.json")));
         if (!file.open(QIODevice::WriteOnly)) return false;
         return file.write(QJsonDocument(QJsonObject{{QStringLiteral("id"), id},
