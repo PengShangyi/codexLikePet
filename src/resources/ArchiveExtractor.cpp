@@ -1,5 +1,7 @@
 #include "resources/ArchiveExtractor.h"
 
+#include "resources/PackagePolicy.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -8,8 +10,6 @@
 #include <miniz.h>
 
 #include <sys/stat.h>
-
-#include <algorithm>
 
 namespace {
 class ZipReader final
@@ -129,34 +129,17 @@ bool ArchiveExtractor::extractPotatoPackage(const QString &archivePath,
 
 bool ArchiveExtractor::isSafeEntryName(const QString &entryName, QString *cleanPath)
 {
-    const bool hasControlCharacter = std::any_of(entryName.cbegin(),
-                                                  entryName.cend(),
-                                                  [](QChar character) {
-                                                      const ushort value = character.unicode();
-                                                      return value < 0x20 || value == 0x7f;
-                                                  });
-    if (entryName.isEmpty() || entryName.contains(QChar::Null)
-        || hasControlCharacter || entryName.contains(QLatin1Char('\\'))
-        || QDir::isAbsolutePath(entryName)
-        || (entryName.size() >= 2 && entryName.at(0).isLetter()
-            && entryName.at(1) == QLatin1Char(':'))) {
-        return false;
-    }
-    const QString cleaned = QDir::cleanPath(entryName);
-    if (cleaned == QStringLiteral(".") || cleaned == QStringLiteral("..")
-        || cleaned.startsWith(QStringLiteral("../"))) {
-        return false;
-    }
+    QString cleaned;
+    if (!PackagePolicy::isPortableRelativePath(entryName, &cleaned)) return false;
+    // Stricter than the directory validator on one point: an archive entry that
+    // cleans to "." names the destination root itself, which is never a real
+    // member and would otherwise be extracted over the extraction directory.
+    if (cleaned == QStringLiteral(".") || PackagePolicy::escapesRoot(cleaned)) return false;
     *cleanPath = cleaned;
     return true;
 }
 
 bool ArchiveExtractor::isAllowedFileName(const QString &path)
 {
-    const QFileInfo info(path);
-    const QString suffix = info.suffix().toLower();
-    const QString base = info.fileName().toLower();
-    return suffix == QStringLiteral("json") || suffix == QStringLiteral("png")
-        || suffix == QStringLiteral("webp") || suffix == QStringLiteral("txt")
-        || suffix == QStringLiteral("md") || base.startsWith(QStringLiteral("license"));
+    return PackagePolicy::isAllowedPackageFileName(path);
 }

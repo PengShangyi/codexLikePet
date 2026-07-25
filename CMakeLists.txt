@@ -70,6 +70,9 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/pet/AtlasCache.h
     src/pet/PetAtlas.cpp
     src/pet/PetAtlas.h
+    src/pet/ClipContract.h
+    src/resources/PackagePolicy.cpp
+    src/resources/PackagePolicy.h
     src/resources/PetPackage.cpp
     src/resources/PetPackage.h
     src/resources/PetPackageValidator.cpp

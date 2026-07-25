@@ -42,6 +42,18 @@ target_include_directories(potato_atlas_test PRIVATE ../src)
 target_link_libraries(potato_atlas_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME potato_atlas_test COMMAND potato_atlas_test)
 
+qt_add_executable(potato_package_policy_test
+    test_package_policy.cpp
+    ../src/resources/PackagePolicy.cpp
+    ../src/resources/PackagePolicy.h
+    ../src/pet/ClipContract.h
+    ../src/pet/PetAtlas.cpp
+    ../src/pet/PetAtlas.h
+)
+target_include_directories(potato_package_policy_test PRIVATE ../src)
+target_link_libraries(potato_package_policy_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME potato_package_policy_test COMMAND potato_package_policy_test)
+
 qt_add_executable(potato_package_validator_test
     test_package_validator.cpp
     ../src/pet/PetAtlas.cpp
@@ -50,6 +62,8 @@ qt_add_executable(potato_package_validator_test
     ../src/resources/PetPackage.h
     ../src/resources/PetPackageValidator.cpp
     ../src/resources/PetPackageValidator.h
+    ../src/resources/PackagePolicy.cpp
+    ../src/resources/PackagePolicy.h
 )
 target_include_directories(potato_package_validator_test PRIVATE ../src)
 target_link_libraries(potato_package_validator_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
@@ -63,6 +77,8 @@ qt_add_executable(potato_builtin_pet_test
     ../src/resources/PetPackage.h
     ../src/resources/PetPackageValidator.cpp
     ../src/resources/PetPackageValidator.h
+    ../src/resources/PackagePolicy.cpp
+    ../src/resources/PackagePolicy.h
 )
 target_include_directories(potato_builtin_pet_test PRIVATE ../src)
 target_compile_definitions(potato_builtin_pet_test PRIVATE
@@ -79,6 +95,8 @@ qt_add_executable(potato_package_importer_test
     ../src/resources/PetPackage.h
     ../src/resources/PetPackageValidator.cpp
     ../src/resources/PetPackageValidator.h
+    ../src/resources/PackagePolicy.cpp
+    ../src/resources/PackagePolicy.h
     ../src/resources/ArchiveExtractor.cpp
     ../src/resources/ArchiveExtractor.h
     ../src/resources/PetPackageImporter.cpp
@@ -131,6 +149,8 @@ qt_add_executable(potato_library_test
     ../src/resources/PetPackage.h
     ../src/resources/PetPackageValidator.cpp
     ../src/resources/PetPackageValidator.h
+    ../src/resources/PackagePolicy.cpp
+    ../src/resources/PackagePolicy.h
     ../src/resources/PetStore.cpp
     ../src/resources/PetStore.h
     ../src/resources/PetLibrary.cpp
@@ -304,6 +324,8 @@ qt_add_executable(potato_app_controller_test
     ../src/resources/PetPackage.h
     ../src/resources/PetPackageValidator.cpp
     ../src/resources/PetPackageValidator.h
+    ../src/resources/PackagePolicy.cpp
+    ../src/resources/PackagePolicy.h
     ../src/resources/ArchiveExtractor.cpp
     ../src/resources/ArchiveExtractor.h
     ../src/resources/PetPackageImporter.cpp

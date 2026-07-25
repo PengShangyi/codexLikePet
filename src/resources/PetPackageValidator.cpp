@@ -1,6 +1,8 @@
 #include "resources/PetPackageValidator.h"
 
+#include "pet/ClipContract.h"
 #include "pet/PetAtlas.h"
+#include "resources/PackagePolicy.h"
 
 #include <QDir>
 #include <QDirIterator>
@@ -11,8 +13,6 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSet>
-
-#include <algorithm>
 
 namespace {
 void addIssue(PackageValidationResult *result,
@@ -69,8 +69,7 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
         result.package.spriteSheetPath = QStringLiteral("spritesheet.webp");
     }
 
-    static const QRegularExpression idPattern(QStringLiteral("^[a-z0-9][a-z0-9-]{0,63}$"));
-    if (!idPattern.match(result.package.id).hasMatch()) {
+    if (!PackagePolicy::isValidPetId(result.package.id)) {
         addIssue(&result, QStringLiteral("pet.id"), QStringLiteral("Pet id must use lowercase letters, digits, and hyphens"));
     }
     if (result.package.displayName.isEmpty()) {
@@ -122,22 +121,12 @@ bool PetPackageValidator::isSafeRelativePath(const QString &rootPath,
                                              const QString &relativePath,
                                              QString *error)
 {
-    const bool windowsDrivePath = relativePath.size() >= 2
-        && relativePath.at(0).isLetter() && relativePath.at(1) == QLatin1Char(':');
-    const bool hasControlCharacter = std::any_of(relativePath.cbegin(),
-                                                  relativePath.cend(),
-                                                  [](QChar character) {
-                                                      const ushort value = character.unicode();
-                                                      return value < 0x20 || value == 0x7f;
-                                                  });
-    if (relativePath.isEmpty() || relativePath.contains(QChar::Null)
-        || hasControlCharacter || relativePath.contains(QLatin1Char('\\')) || windowsDrivePath
-        || QDir::isAbsolutePath(relativePath)) {
+    QString clean;
+    if (!PackagePolicy::isPortableRelativePath(relativePath, &clean)) {
         *error = QStringLiteral("Path must be a portable, non-empty relative path");
         return false;
     }
-    const QString clean = QDir::cleanPath(relativePath);
-    if (clean == QStringLiteral("..") || clean.startsWith(QStringLiteral("../"))) {
+    if (PackagePolicy::escapesRoot(clean)) {
         *error = QStringLiteral("Path escapes the package root");
         return false;
     }
@@ -348,10 +337,8 @@ void PetPackageValidator::validateClip(const QString &rootPath,
     }
     QImageReader reader(QDir(rootPath).filePath(clip.path));
     reader.setAutoTransform(false);
-    const QSize size = reader.size();
-    const int frames = size.width() / PetAtlas::CellWidth;
-    if (!size.isValid() || size.height() != PetAtlas::CellHeight
-        || size.width() % PetAtlas::CellWidth != 0 || frames < 1 || frames > 8) {
+    int frames = 0;
+    if (!ClipContract::isValidGeometry(reader.size(), &frames)) {
         addIssue(result,
                  QStringLiteral("clip.geometry"),
                  QStringLiteral("%1 %2 clip must contain 1 to 8 transparent 192x208 cells")
@@ -379,14 +366,12 @@ void PetPackageValidator::validateClip(const QString &rootPath,
                  clip.path);
         return;
     }
-    for (int duration : clip.durationsMs) {
-        if (duration < 50 || duration > 2000) {
-            addIssue(result,
-                     QStringLiteral("clip.duration"),
-                     QStringLiteral("%1 %2 clip durations must be 50–2000ms").arg(context, name),
-                     clip.path);
-            return;
-        }
+    if (!ClipContract::areValidDurations(clip.durationsMs)) {
+        addIssue(result,
+                 QStringLiteral("clip.duration"),
+                 QStringLiteral("%1 %2 clip durations must be 50–2000ms").arg(context, name),
+                 clip.path);
+        return;
     }
 }
 
@@ -458,25 +443,14 @@ void PetPackageValidator::validateDirectoryEnvelope(const QString &rootPath,
                      QStringLiteral("Symbolic links are not allowed"),
                      relative);
         }
-        const bool hasControlCharacter = std::any_of(relative.cbegin(),
-                                                      relative.cend(),
-                                                      [](QChar character) {
-                                                          const ushort value = character.unicode();
-                                                          return value < 0x20 || value == 0x7f;
-                                                      });
-        if (hasControlCharacter) {
+        if (PackagePolicy::hasControlCharacters(relative)) {
             addIssue(result,
                      QStringLiteral("package.path"),
                      QStringLiteral("Control characters are not allowed in package paths"));
         }
         if (info.isFile()) {
             totalBytes += info.size();
-            const QString suffix = info.suffix().toLower();
-            const QString base = info.fileName().toLower();
-            const bool allowed = suffix == QStringLiteral("json") || suffix == QStringLiteral("png")
-                || suffix == QStringLiteral("webp") || suffix == QStringLiteral("txt")
-                || suffix == QStringLiteral("md") || base.startsWith(QStringLiteral("license"));
-            if (!allowed) {
+            if (!PackagePolicy::isAllowedPackageFileName(info.fileName())) {
                 addIssue(result,
                          QStringLiteral("package.fileType"),
                          QStringLiteral("Unsupported file in package"),

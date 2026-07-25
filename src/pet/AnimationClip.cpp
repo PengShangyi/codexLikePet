@@ -1,5 +1,6 @@
 #include "pet/AnimationClip.h"
 
+#include "pet/ClipContract.h"
 #include "pet/PetAtlas.h"
 
 #include <QFileInfo>
@@ -14,11 +15,7 @@ bool AnimationClip::load(const QString &filePath, const QVector<int> &durationsM
 
     QImageReader reader(m_filePath);
     reader.setAutoTransform(false);
-    const QSize sourceSize = reader.size();
-    const int sourceFrames = sourceSize.width() / PetAtlas::CellWidth;
-    if (!sourceSize.isValid() || sourceSize.height() != PetAtlas::CellHeight
-        || sourceSize.width() % PetAtlas::CellWidth != 0
-        || sourceFrames < 1 || sourceFrames > 8) {
+    if (!ClipContract::isValidGeometry(reader.size())) {
         m_error = QStringLiteral("Clip must be transparent and contain 1 to 8 192x208 frames");
         return false;
     }
@@ -29,9 +26,9 @@ bool AnimationClip::load(const QString &filePath, const QVector<int> &durationsM
                                                   : reader.errorString();
         return false;
     }
-    const int frames = image.width() / PetAtlas::CellWidth;
-    if (!image.hasAlphaChannel() || image.height() != PetAtlas::CellHeight
-        || image.width() % PetAtlas::CellWidth != 0 || frames < 1 || frames > 8) {
+    // Re-check against the decoded image, not just the header it advertised.
+    int frames = 0;
+    if (!image.hasAlphaChannel() || !ClipContract::isValidGeometry(image.size(), &frames)) {
         m_error = QStringLiteral("Clip must be transparent and contain 1 to 8 192x208 frames");
         return false;
     }
@@ -39,11 +36,9 @@ bool AnimationClip::load(const QString &filePath, const QVector<int> &durationsM
         m_error = QStringLiteral("Clip frame count and durations do not match");
         return false;
     }
-    for (const int duration : durationsMs) {
-        if (duration < 50 || duration > 2000) {
-            m_error = QStringLiteral("Clip durations must be between 50 and 2000ms");
-            return false;
-        }
+    if (!ClipContract::areValidDurations(durationsMs)) {
+        m_error = QStringLiteral("Clip durations must be between 50 and 2000ms");
+        return false;
     }
 
     m_image = image.convertToFormat(QImage::Format_RGBA8888);

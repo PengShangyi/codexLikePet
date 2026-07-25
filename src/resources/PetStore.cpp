@@ -1,5 +1,6 @@
 #include "resources/PetStore.h"
 
+#include "resources/PackagePolicy.h"
 #include "resources/PetPackageValidator.h"
 
 #include <QDir>
@@ -7,7 +8,6 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
-#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUuid>
 
@@ -99,8 +99,7 @@ bool PetStore::install(const PackageValidationResult &validation,
 
 bool PetStore::remove(const QString &petId, QString *error) const
 {
-    static const QRegularExpression safeId(QStringLiteral("^[a-z0-9][a-z0-9-]{0,63}$"));
-    if (!safeId.match(petId).hasMatch()) {
+    if (!PackagePolicy::isValidPetId(petId)) {
         *error = QStringLiteral("Invalid pet id");
         return false;
     }
