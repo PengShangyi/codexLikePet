@@ -45,7 +45,7 @@ private slots:
         QCOMPARE(result.package.variantClips.size(), environments.size());
         for (const QString &environment : environments) {
             const auto clips = result.package.variantClips.value(environment);
-            QCOMPARE(clips.size(), edgeClips.size());
+            QCOMPARE(clips.size(), edgeClips.size() + 1); // 3 edge clips + 1 typing clip
             for (const QString &name : edgeClips) {
                 QVERIFY2(clips.contains(name), qPrintable(environment + QLatin1Char('/') + name));
                 QCOMPARE(clips.value(name).durationsMs.size(), 6);
@@ -76,6 +76,16 @@ private slots:
                 QCOMPARE(pixelsHash(frame(1)), pixelsHash(frame(5)));
                 QCOMPARE(pixelsHash(frame(2)), pixelsHash(frame(4)));
             }
+            // Keystroke-driven typing clip: 3 frames (rest, left press, right press).
+            QVERIFY2(clips.contains(QStringLiteral("typing")),
+                     qPrintable(environment + QStringLiteral("/typing")));
+            const auto typing = clips.value(QStringLiteral("typing"));
+            QCOMPARE(typing.durationsMs.size(), 3);
+            QCOMPARE(typing.path, QStringLiteral("clips/%1-typing.webp").arg(environment));
+            const QImage typingStrip(QDir(root).filePath(typing.path));
+            QVERIFY2(!typingStrip.isNull(), qPrintable(typing.path));
+            QCOMPARE(typingStrip.size(), QSize(192 * 3, 208));
+            QVERIFY(typingStrip.hasAlphaChannel());
         }
     }
 };

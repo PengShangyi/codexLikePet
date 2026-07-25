@@ -87,6 +87,7 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     , m_loginItemController(new MacLoginItemController)
     , m_loginItemCoordinator(new LoginItemCoordinator(m_settings, m_loginItemController, this))
     , m_clickCompletionTimer(new QTimer(this))
+    , m_typingReturnTimer(new QTimer(this))
     , m_suppressSystemMutations(mode == AppRunMode::RuntimeCheck)
 {
     m_clickCompletionTimer->setSingleShot(true);
@@ -94,6 +95,14 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     connect(m_clickCompletionTimer, &QTimer::timeout, this, [this] {
         if (m_behavior->state() == BehaviorState::ClickReaction) {
             m_behavior->finishClickReaction();
+        }
+    });
+    m_typingReturnTimer->setSingleShot(true);
+    m_typingReturnTimer->setInterval(110);
+    connect(m_typingReturnTimer, &QTimer::timeout, this, [this] {
+        // Relax back to the resting "hands on keyboard" frame after a typing pause.
+        if (m_typingPressActive && m_behavior->state() == BehaviorState::Typing) {
+            m_animationPlayer->showClipFrame(0);
         }
     });
     connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
@@ -135,6 +144,10 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     connect(m_settings, &AppSettings::alwaysOnTopChanged,
             m_speechBubble, &SpeechBubble::setAlwaysOnTop);
     connect(m_typingDetector, &TypingActivityDetector::typingChanged, m_behavior, &BehaviorController::setTypingActive);
+    // Per-keystroke press. Connected AFTER the detector (which is constructed first),
+    // so on each key the detector's transition to the Typing state runs before this
+    // pulse — the key that starts typing already reads as a press. Timing only.
+    connect(m_inputSource, &InputActivitySource::activityDetected, this, &AppController::onTypingKey);
     connect(m_inputSource, &InputActivitySource::monitoringInvalidated, this, [this] {
         m_inputSource->stop();
         m_settings->setTypingDetectionEnabled(false);
@@ -146,6 +159,11 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     connect(m_motionController, &MotionController::reducedMotionChanged, m_animationPlayer, &AnimationPlayer::setReducedMotion);
     connect(m_motionController, &MotionController::reducedMotionChanged, m_settingsWindow, &SettingsWindow::setReducedMotion);
     connect(m_motionController, &MotionController::reducedMotionChanged, this, [this](bool reduced) {
+        // Typing switches between per-keystroke motion and a static rest frame.
+        if (m_behavior->state() == BehaviorState::Typing) {
+            applyBehaviorState(BehaviorState::Typing);
+            return;
+        }
         if (m_behavior->state() != BehaviorState::ClickReaction) return;
         if (reduced) m_clickCompletionTimer->start();
         else m_clickCompletionTimer->stop();
@@ -474,9 +492,56 @@ bool AppController::playClip(const QString &name, bool restart)
     return true;
 }
 
+void AppController::beginTypingAnimation()
+{
+    const QSharedPointer<AnimationClip> clip = loadClip(QStringLiteral("typing"));
+    if (clip) {
+        // Keystroke-driven: hold the clip on its resting frame and let each key
+        // advance a press (onTypingKey/pulseTypingPress) instead of free-running.
+        m_typingClipFrames = clip->frameCount();
+        m_animationPlayer->setClip(clip, QStringLiteral("typing"), true);
+        m_animationPlayer->showClipFrame(0);  // rest: hands on the keyboard (stops the timer)
+        // Reduced motion holds that static rest frame with no per-key motion.
+        m_typingPressActive = !m_motionController->reducedMotion() && m_typingClipFrames >= 2;
+        m_typingReturnTimer->stop();
+        return;
+    }
+    // No dedicated typing clip: fall back to the v2 "running" row, defined by the
+    // contract as "active task work or processing, not literal foot-running"
+    // (hatch-pet/references/animation-rows.md) — a clearly-distinct working loop.
+    m_typingPressActive = false;
+    m_animationPlayer->setState(V2AnimationState::Running);
+    m_animationPlayer->start();
+}
+
+void AppController::pulseTypingPress()
+{
+    if (m_typingClipFrames < 2) return;
+    // Alternate press frames when the clip provides them (1 = left paw, 2 = right);
+    // a 2-frame clip just toggles rest/press.
+    m_typingPressToggle = !m_typingPressToggle;
+    const int press = m_typingClipFrames >= 3 ? (m_typingPressToggle ? 1 : 2) : 1;
+    m_animationPlayer->showClipFrame(press);
+    m_typingReturnTimer->start();  // relax back to rest after a short pause
+}
+
+void AppController::onTypingKey()
+{
+    // One key = one paw press. Gated so it animates only during Typing and touches
+    // nothing but the in-memory frame index (no key content is ever involved).
+    if (!m_typingPressActive || m_sleeping || !m_petVisible) return;
+    if (m_behavior->state() != BehaviorState::Typing) return;
+    pulseTypingPress();
+}
+
 void AppController::applyBehaviorState(BehaviorState state)
 {
     if (state != BehaviorState::ClickReaction) m_clickCompletionTimer->stop();
+    // Leaving Typing stops the keystroke-driven press machinery.
+    if (state != BehaviorState::Typing) {
+        m_typingPressActive = false;
+        m_typingReturnTimer->stop();
+    }
     if (!m_currentAtlas || !m_petVisible || m_sleeping) {
         m_animationPlayer->stop();
         return;
@@ -487,9 +552,7 @@ void AppController::applyBehaviorState(BehaviorState state)
         m_animationPlayer->start();
         break;
     case BehaviorState::Typing:
-        if (playClip(QStringLiteral("typing"))) break;
-        m_animationPlayer->setState(V2AnimationState::Running);
-        m_animationPlayer->start();
+        beginTypingAnimation();
         break;
     case BehaviorState::ClickReaction:
         if (playClip(QStringLiteral("click"))) break;
@@ -519,6 +582,11 @@ void AppController::applyBehaviorState(BehaviorState state)
         break;
     }
     }
+}
+
+bool AppController::isTypingPressActive() const
+{
+    return m_typingPressActive;
 }
 
 void AppController::handlePetClick()

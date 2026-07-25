@@ -10,25 +10,55 @@ class BehaviorTest final : public QObject
     Q_OBJECT
 
 private slots:
+    // Priority, highest to lowest: Dragging > ClickReaction > Typing > Edge > Idle.
     void enforcesThePriorityOrder()
     {
         BehaviorController behavior;
-        behavior.setTypingActive(true);
-        QCOMPARE(behavior.state(), BehaviorState::Typing);
+
+        // An edge pose shows when nothing more urgent is active...
         behavior.setSnapEdge(SnapEdge::Left);
         QCOMPARE(behavior.state(), BehaviorState::EdgeLeft);
+        // ...but typing outranks it, so activity stays visible while parked.
+        behavior.setTypingActive(true);
+        QCOMPARE(behavior.state(), BehaviorState::Typing);
+        // A click reaction outranks typing.
         behavior.triggerClick();
         QCOMPARE(behavior.state(), BehaviorState::ClickReaction);
+        // Dragging outranks everything.
         behavior.beginDrag();
         behavior.setDragDirection(HorizontalDragDirection::Right);
         QCOMPARE(behavior.state(), BehaviorState::DraggingRight);
+
+        // Releasing onto an edge while still typing keeps typing on top.
         behavior.endDrag(SnapEdge::Bottom);
-        QCOMPARE(behavior.state(), BehaviorState::EdgeBottom);
+        QCOMPARE(behavior.state(), BehaviorState::Typing);
+        // A transient click while typing resolves back to typing afterwards.
         behavior.triggerClick();
+        QCOMPARE(behavior.state(), BehaviorState::ClickReaction);
         behavior.finishClickReaction();
+        QCOMPARE(behavior.state(), BehaviorState::Typing);
+
+        // Typing stops -> fall back to the snapped edge, then to idle.
+        behavior.setTypingActive(false);
         QCOMPARE(behavior.state(), BehaviorState::EdgeBottom);
         behavior.setSnapEdge(SnapEdge::None);
-        QCOMPARE(behavior.state(), BehaviorState::Typing);
+        QCOMPARE(behavior.state(), BehaviorState::Idle);
+    }
+
+    void typingOverridesEveryEdgeAndRevertsWhenItStops()
+    {
+        struct Case { SnapEdge edge; BehaviorState pose; };
+        for (const Case c : {Case{SnapEdge::Left, BehaviorState::EdgeLeft},
+                             Case{SnapEdge::Right, BehaviorState::EdgeRight},
+                             Case{SnapEdge::Bottom, BehaviorState::EdgeBottom}}) {
+            BehaviorController behavior;
+            behavior.setSnapEdge(c.edge);
+            QCOMPARE(behavior.state(), c.pose);
+            behavior.setTypingActive(true);
+            QCOMPARE(behavior.state(), BehaviorState::Typing);
+            behavior.setTypingActive(false);
+            QCOMPARE(behavior.state(), c.pose);
+        }
     }
 
     void keepsSpeechBubbleInsideThePrimaryGeometry()

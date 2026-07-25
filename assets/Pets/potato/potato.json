@@ -16,42 +16,50 @@
     "spring-day": {
       "edge-left": {"path": "clips/spring-day-edge-left.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
       "edge-right": {"path": "clips/spring-day-edge-right.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
-      "edge-bottom": {"path": "clips/spring-day-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]}
+      "edge-bottom": {"path": "clips/spring-day-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]},
+      "typing": {"path": "clips/spring-day-typing.webp", "durationsMs": [130, 130, 130]}
     },
     "spring-night": {
       "edge-left": {"path": "clips/spring-night-edge-left.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
       "edge-right": {"path": "clips/spring-night-edge-right.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
-      "edge-bottom": {"path": "clips/spring-night-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]}
+      "edge-bottom": {"path": "clips/spring-night-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]},
+      "typing": {"path": "clips/spring-night-typing.webp", "durationsMs": [130, 130, 130]}
     },
     "summer-day": {
       "edge-left": {"path": "clips/summer-day-edge-left.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
       "edge-right": {"path": "clips/summer-day-edge-right.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
-      "edge-bottom": {"path": "clips/summer-day-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]}
+      "edge-bottom": {"path": "clips/summer-day-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]},
+      "typing": {"path": "clips/summer-day-typing.webp", "durationsMs": [130, 130, 130]}
     },
     "summer-night": {
       "edge-left": {"path": "clips/summer-night-edge-left.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
       "edge-right": {"path": "clips/summer-night-edge-right.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
-      "edge-bottom": {"path": "clips/summer-night-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]}
+      "edge-bottom": {"path": "clips/summer-night-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]},
+      "typing": {"path": "clips/summer-night-typing.webp", "durationsMs": [130, 130, 130]}
     },
     "autumn-day": {
       "edge-left": {"path": "clips/autumn-day-edge-left.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
       "edge-right": {"path": "clips/autumn-day-edge-right.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
-      "edge-bottom": {"path": "clips/autumn-day-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]}
+      "edge-bottom": {"path": "clips/autumn-day-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]},
+      "typing": {"path": "clips/autumn-day-typing.webp", "durationsMs": [130, 130, 130]}
     },
     "autumn-night": {
       "edge-left": {"path": "clips/autumn-night-edge-left.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
       "edge-right": {"path": "clips/autumn-night-edge-right.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
-      "edge-bottom": {"path": "clips/autumn-night-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]}
+      "edge-bottom": {"path": "clips/autumn-night-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]},
+      "typing": {"path": "clips/autumn-night-typing.webp", "durationsMs": [130, 130, 130]}
     },
     "winter-day": {
       "edge-left": {"path": "clips/winter-day-edge-left.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
       "edge-right": {"path": "clips/winter-day-edge-right.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
-      "edge-bottom": {"path": "clips/winter-day-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]}
+      "edge-bottom": {"path": "clips/winter-day-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]},
+      "typing": {"path": "clips/winter-day-typing.webp", "durationsMs": [130, 130, 130]}
     },
     "winter-night": {
       "edge-left": {"path": "clips/winter-night-edge-left.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
       "edge-right": {"path": "clips/winter-night-edge-right.webp", "durationsMs": [190, 170, 220, 250, 220, 170]},
-      "edge-bottom": {"path": "clips/winter-night-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]}
+      "edge-bottom": {"path": "clips/winter-night-edge-bottom.webp", "durationsMs": [320, 280, 340, 380, 340, 280]},
+      "typing": {"path": "clips/winter-night-typing.webp", "durationsMs": [130, 130, 130]}
     }
   }
 }

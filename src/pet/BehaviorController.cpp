@@ -65,10 +65,12 @@ BehaviorState BehaviorController::resolvedState() const
             : BehaviorState::DraggingRight;
     }
     if (m_clickReaction) return BehaviorState::ClickReaction;
+    // Typing outranks edge residency: a pet parked against an edge still reacts
+    // to activity while typing, then falls back to the edge pose once it stops.
+    if (m_typing) return BehaviorState::Typing;
     if (m_snapEdge == SnapEdge::Left) return BehaviorState::EdgeLeft;
     if (m_snapEdge == SnapEdge::Right) return BehaviorState::EdgeRight;
     if (m_snapEdge == SnapEdge::Bottom) return BehaviorState::EdgeBottom;
-    if (m_typing) return BehaviorState::Typing;
     return BehaviorState::Idle;
 }
 

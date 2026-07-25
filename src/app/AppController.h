@@ -51,6 +51,10 @@ public:
     bool start();
     void requestSettings();
 
+    // Exposed for tests: whether keystroke-driven typing presses are engaged
+    // (a dedicated typing clip is loaded and motion is allowed).
+    bool isTypingPressActive() const;
+
 signals:
     void petVisibilityRequested(bool visible);
     void settingsRequested();
@@ -66,6 +70,9 @@ private:
     void applyBehaviorState(BehaviorState state);
     void handlePetClick();
     void setTypingMonitoringEnabled(bool enabled);
+    void beginTypingAnimation();
+    void onTypingKey();
+    void pulseTypingPress();
     void loadCurrentVariant();
     void configurePetPreview();
     void loadPreviewAtlas(const QString &relativePath);
@@ -104,6 +111,12 @@ private:
     LoginItemController *m_loginItemController;
     LoginItemCoordinator *m_loginItemCoordinator;
     QTimer *m_clickCompletionTimer;
+    // Keystroke-driven typing animation: each key advances the held "typing" clip
+    // to a press frame; m_typingReturnTimer relaxes it back to rest after a pause.
+    QTimer *m_typingReturnTimer;
+    bool m_typingPressActive = false;  // true only when a keystroke-driven clip is in use
+    bool m_typingPressToggle = false;  // alternates left/right paw press
+    int m_typingClipFrames = 0;
     bool m_suppressSystemMutations = false;
     bool m_sleeping = false;
     bool m_petVisible = true;

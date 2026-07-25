@@ -73,6 +73,15 @@ void AnimationPlayer::setReducedMotion(bool reduced)
     }
 }
 
+void AnimationPlayer::showClipFrame(int index)
+{
+    if (!m_clip || !m_clip->isValid()) return;
+    m_timer->stop();
+    m_shouldRun = false;  // held: the caller advances frames explicitly per keystroke
+    m_frameIndex = std::clamp(index, 0, m_clip->frameCount() - 1);
+    presentCurrentFrame();
+}
+
 void AnimationPlayer::start()
 {
     m_shouldRun = true;

@@ -23,6 +23,9 @@ public:
                  bool restart = true);
     void setSpeedFactor(double factor);
     void setReducedMotion(bool reduced);
+    // Show one specific frame of the current clip and hold it (no auto-advance).
+    // Used for keystroke-driven typing, where each key presents the next frame.
+    void showClipFrame(int index);
     void start();
     void stop();
     bool isRunning() const;
