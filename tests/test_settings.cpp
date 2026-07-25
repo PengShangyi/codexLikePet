@@ -80,6 +80,35 @@ private slots:
         QVERIFY(restored.onboardingCompleted()); // persists across launches
     }
 
+    // The pet window's position must live in the injected backing store like every
+    // other preference. PetWindow used to reach for a bare QSettings(), so running
+    // the test suite wrote window/position into real macOS preference domains.
+    void windowPositionRoundTripsThroughTheInjectedStore()
+    {
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("settings.ini"));
+        {
+            AppSettings settings(path);
+            QVERIFY(!settings.hasWindowPosition());
+
+            settings.setWindowPosition(QPoint(0, 0)); // must persist, not read as "absent"
+            QVERIFY(settings.hasWindowPosition());
+            QCOMPARE(settings.windowPosition(), QPoint(0, 0));
+
+            settings.setWindowPosition(QPoint(412, 96));
+            QCOMPARE(settings.windowPosition(), QPoint(412, 96));
+        }
+        {
+            AppSettings restored(path);
+            QVERIFY(restored.hasWindowPosition());
+            QCOMPARE(restored.windowPosition(), QPoint(412, 96));
+            restored.clearWindowPosition();
+            QVERIFY(!restored.hasWindowPosition());
+        }
+        AppSettings cleared(path);
+        QVERIFY(!cleared.hasWindowPosition());
+    }
+
     void recoversCorruptAndNonFiniteNumericValues()
     {
         QTemporaryDir temp;

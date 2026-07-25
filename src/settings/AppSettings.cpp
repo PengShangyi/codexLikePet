@@ -94,6 +94,29 @@ bool AppSettings::onboardingCompleted() const
     return m_settings->value(QStringLiteral("onboarding/welcomeShown"), false).toBool();
 }
 
+bool AppSettings::hasWindowPosition() const
+{
+    return m_settings->contains(QStringLiteral("window/position"));
+}
+
+QPoint AppSettings::windowPosition() const
+{
+    return m_settings->value(QStringLiteral("window/position")).toPoint();
+}
+
+void AppSettings::setWindowPosition(const QPoint &value)
+{
+    // Checks hasWindowPosition() as well as the value so that a first move to
+    // exactly (0, 0) still persists instead of matching the absent-key default.
+    if (hasWindowPosition() && windowPosition() == value) return;
+    m_settings->setValue(QStringLiteral("window/position"), value);
+}
+
+void AppSettings::clearWindowPosition()
+{
+    m_settings->remove(QStringLiteral("window/position"));
+}
+
 void AppSettings::setScale(double value)
 {
     value = std::isfinite(value) ? std::clamp(value, 0.5, 2.0) : 1.0;

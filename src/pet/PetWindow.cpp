@@ -11,7 +11,6 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScreen>
-#include <QSettings>
 #include <QShowEvent>
 #include <QTimer>
 
@@ -21,6 +20,7 @@ PetWindow::PetWindow(AppSettings *settings, QWidget *parent)
     : QWidget(parent,
               Qt::Tool | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus
                   | Qt::WindowStaysOnTopHint)
+    , m_settings(settings)
 {
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_NoSystemBackground);
@@ -135,7 +135,7 @@ void PetWindow::showEvent(QShowEvent *event)
 
 void PetWindow::resetPosition()
 {
-    QSettings().remove(QStringLiteral("window/position"));
+    m_settings->clearWindowPosition();
     updateSnapEdge(SnapEdge::None);
     restorePosition();
 }
@@ -143,9 +143,8 @@ void PetWindow::resetPosition()
 void PetWindow::restorePosition()
 {
     const QRect available = primaryAvailableGeometry();
-    const QPoint saved = QSettings().value(QStringLiteral("window/position")).toPoint();
-    const bool hasSaved = QSettings().contains(QStringLiteral("window/position"));
-    const QPoint position = hasSaved
+    const QPoint saved = m_settings->windowPosition();
+    const QPoint position = m_settings->hasWindowPosition()
         && WindowPlacement::isUsableSavedPosition(saved, size(), available)
         ? saved
         : WindowPlacement::defaultPosition(available, size());
@@ -205,7 +204,7 @@ void PetWindow::moveEvent(QMoveEvent *event)
 {
     QWidget::moveEvent(event);
     if (!m_restoringPosition && !m_dragging) {
-        QSettings().setValue(QStringLiteral("window/position"), event->pos());
+        m_settings->setWindowPosition(event->pos());
     }
 }
 
@@ -265,7 +264,7 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event)
         updateSnapEdge(decision.snapEdge);
         move(decision.snappedTopLeft);
         m_dragging = false;
-        QSettings().setValue(QStringLiteral("window/position"), pos());
+        m_settings->setWindowPosition(pos());
         emit dragFinished(m_snapEdge);
     }
     event->accept();

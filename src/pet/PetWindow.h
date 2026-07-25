@@ -67,6 +67,7 @@ private:
     // the overlay re-push, which is only needed for display/wake events.
     void clampPosition();
 
+    AppSettings *m_settings;
     QImage m_frame;
     double m_scaleFactor = 1.0;
     bool m_alwaysOnTop = true;

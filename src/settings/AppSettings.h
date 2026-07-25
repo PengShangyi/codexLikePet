@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPoint>
 #include <QTime>
 
 #include <memory>
@@ -45,6 +46,15 @@ public:
     AppLanguage language() const;
     QString selectedPetId() const;
     bool onboardingCompleted() const;
+
+    // Pet window placement. Lives here rather than in PetWindow so it honors the
+    // same injected backing store as every other preference -- a bare QSettings()
+    // in the widget wrote to the process-global domain, which meant the test
+    // suite mutated real macOS preferences.
+    bool hasWindowPosition() const;
+    QPoint windowPosition() const;
+    void setWindowPosition(const QPoint &value);
+    void clearWindowPosition();
 
 public slots:
     void setScale(double value);
