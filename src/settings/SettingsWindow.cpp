@@ -367,6 +367,11 @@ void SettingsWindow::setResourceSummary(const QString &summary)
     m_resourceSummary->setPlainText(summary);
 }
 
+QString SettingsWindow::resourceSummary() const
+{
+    return m_resourceSummary->toPlainText();
+}
+
 void SettingsWindow::setValidationReport(const QString &report, bool error)
 {
     m_report->setVisible(!report.isEmpty());

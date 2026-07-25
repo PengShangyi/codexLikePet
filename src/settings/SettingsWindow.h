@@ -36,6 +36,7 @@ public:
     void setPreviewClipOptions(const QStringList &labels, const QStringList &keys);
     void setPreviewClip(QSharedPointer<AnimationClip> clip, bool smoothRendering);
     void setResourceSummary(const QString &summary);
+    QString resourceSummary() const;
     void setValidationReport(const QString &report, bool error);
     void setReducedMotion(bool reduced);
 

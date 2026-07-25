@@ -108,6 +108,7 @@ private:
     void pulseTypingPress();
     void loadCurrentVariant();
     void configurePetPreview();
+    void updateResourceSummary();
     void loadPreviewAtlas(const QString &relativePath);
     void loadPreviewClip(const QString &key);
     QSharedPointer<AnimationClip> loadClip(const QString &name);

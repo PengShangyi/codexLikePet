@@ -6,7 +6,9 @@
 #include "pet/PetAtlas.h"
 #include "platform/SystemActivitySource.h"
 #include "settings/AppSettings.h"
+#include "settings/SettingsWindow.h"
 
+#include <QApplication>
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -335,6 +337,54 @@ private slots:
 
         // After the inactivity window, typing clears and press mode disengages.
         QTRY_VERIFY_WITH_TIMEOUT(!controller.isTypingPressActive(), 4000);
+    }
+
+    // The season/day-night fallback table shown in Settings is built from the
+    // package and the UI language only. It used to be rebuilt from
+    // loadCurrentVariant(), i.e. on every day/night and season rollover as well;
+    // moving it out of that path must not leave it empty or stale.
+    void resourceSummaryCoversEveryVariantAndFollowsLanguage()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+        settings.setLanguage(AppLanguage::English);
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+
+        SettingsWindow *window = nullptr;
+        for (QWidget *candidate : QApplication::topLevelWidgets()) {
+            if (auto *found = qobject_cast<SettingsWindow *>(candidate)) window = found;
+        }
+        QVERIFY2(window, "settings window not found among top-level widgets");
+
+        const QStringList variants{
+            QStringLiteral("spring-day"), QStringLiteral("spring-night"),
+            QStringLiteral("summer-day"), QStringLiteral("summer-night"),
+            QStringLiteral("autumn-day"), QStringLiteral("autumn-night"),
+            QStringLiteral("winter-day"), QStringLiteral("winter-night")};
+        const QString summary = window->resourceSummary();
+        QVERIFY(!summary.isEmpty());
+        for (const QString &variant : variants) {
+            QVERIFY2(summary.contains(variant), qPrintable(variant));
+        }
+        // This pet ships no clips, so every clip slot reports the v2 fallback.
+        QVERIFY(summary.contains(QStringLiteral("v2 fallback")));
+
+        // An environment rollover no longer rebuilds the summary; it must still be
+        // the same complete table afterwards rather than empty or truncated.
+        settings.setHemisphere(Hemisphere::South);
+        QCOMPARE(window->resourceSummary(), summary);
+
+        // Language does drive it: the fallback label is localized.
+        settings.setLanguage(AppLanguage::SimplifiedChinese);
+        const QString localized = window->resourceSummary();
+        QVERIFY(!localized.contains(QStringLiteral("v2 fallback")));
+        QVERIFY(localized.contains(QStringLiteral("v2 内置回退")));
+        for (const QString &variant : variants) {
+            QVERIFY2(localized.contains(variant), qPrintable(variant));
+        }
     }
 
     void startsCleanlyWithNoPetsAvailable()

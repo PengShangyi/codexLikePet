@@ -133,6 +133,8 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
     connect(m_settingsWindow, &SettingsWindow::resetPositionRequested, m_petWindow, &PetWindow::resetPosition);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
     connect(m_localization, &Localization::languageChanged, this, &AppController::configurePetPreview);
+    // The summary embeds a localized "v2 fallback" label, so it follows language.
+    connect(m_localization, &Localization::languageChanged, this, &AppController::updateResourceSummary);
     connect(m_settingsWindow, &SettingsWindow::petSelected, this, &AppController::selectPet);
     connect(m_settingsWindow, &SettingsWindow::importPackageRequested, this, [this] { importPet(false); });
     connect(m_settingsWindow, &SettingsWindow::importDirectoryRequested, this, [this] { importPet(true); });
@@ -385,8 +387,11 @@ void AppController::selectPet(const QString &id)
     m_settings->setSelectedPetId(id);
     updatePetMenu(id);
     m_currentPackage = record->package;
-    configurePetPreview();
     loadCurrentVariant();
+    // After loadCurrentVariant, not before: it configures the preview itself, and
+    // calling it here too rebuilt both combo lists twice per pet selection.
+    configurePetPreview();
+    updateResourceSummary();
     m_settingsWindow->setPets(m_petLibrary->pets(), id);
 }
 
@@ -452,7 +457,15 @@ void AppController::configurePetPreview()
         }
     }
     m_settingsWindow->setPreviewClipOptions(clipLabels, clipKeys);
+}
 
+// The season/day-night fallback table. Depends only on the package and the UI
+// language, so it is rebuilt on pet or language change -- not from
+// loadCurrentVariant(), which also runs on every day/night and season rollover
+// and used to redo all 40 lookups and their string building for nothing.
+void AppController::updateResourceSummary()
+{
+    if (!m_currentPackage) return;
     QStringList summary;
     const QVector<Season> seasons{Season::Spring, Season::Summer, Season::Autumn, Season::Winter};
     const QVector<TimePhase> phases{TimePhase::Day, TimePhase::Night};
