@@ -7,6 +7,7 @@
 
 class QScreen;
 class QMouseEvent;
+class QContextMenuEvent;
 class QShowEvent;
 class AppSettings;
 
@@ -44,6 +45,9 @@ signals:
     void dragFinished(SnapEdge edge);
     void snapEdgeChanged(SnapEdge edge);
     void clicked();
+    // Right-click (or ctrl-click) on the pet; carries the global cursor position
+    // so the owner can pop the shared tray menu there.
+    void contextMenuRequested(const QPoint &globalPos);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -51,6 +55,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
     void showEvent(QShowEvent *event) override;
 
 private:

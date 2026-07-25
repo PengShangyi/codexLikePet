@@ -198,6 +198,11 @@ bool AppController::start()
     m_trayIcon->setToolTip(QStringLiteral("Potato"));
     m_trayIcon->setContextMenu(m_menu);
     m_trayIcon->show();
+    // Right-clicking the pet pops the same menu at the cursor, so the tray icon
+    // is a convenience rather than the only entry point.
+    connect(m_petWindow, &PetWindow::contextMenuRequested, this, [this](const QPoint &globalPos) {
+        m_menu->popup(globalPos);
+    });
     m_petWindow->restorePosition();
     m_petWindow->show();
     refreshPetLibrary();

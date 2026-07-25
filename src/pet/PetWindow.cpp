@@ -5,6 +5,7 @@
 #include "platform/WindowOverlay.h"
 #include "settings/AppSettings.h"
 
+#include <QContextMenuEvent>
 #include <QGuiApplication>
 #include <QMoveEvent>
 #include <QMouseEvent>
@@ -260,6 +261,15 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event)
         QSettings().setValue(QStringLiteral("window/position"), pos());
         emit dragFinished(m_snapEdge);
     }
+    event->accept();
+}
+
+void PetWindow::contextMenuEvent(QContextMenuEvent *event)
+{
+    // Surface the shared tray menu from the pet itself so it is reachable without
+    // hunting the menu-bar icon. Drag state is left-button only, so a right-click
+    // never begins a drag.
+    emit contextMenuRequested(event->globalPos());
     event->accept();
 }
 
