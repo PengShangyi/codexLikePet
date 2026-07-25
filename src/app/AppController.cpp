@@ -74,7 +74,9 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     , m_atlasCache(new AtlasCache(2))
     , m_animationPlayer(new AnimationPlayer(this))
     , m_behavior(new BehaviorController(this))
-    , m_quoteProvider(new FixedQuoteProvider(QStringLiteral("test balabala"), this))
+    , m_quoteProvider(new LocalQuoteProvider(
+          [localization = m_localization] { return localization->usesChinese(); },
+          this))
     , m_speechBubble(new SpeechBubble)
     , m_inputSource(new MacInputActivitySource(this))
     , m_typingDetector(new TypingActivityDetector(m_inputSource, 1500, this))

@@ -51,18 +51,48 @@ private slots:
         QVERIFY(bubble.windowFlags().testFlag(Qt::WindowStaysOnTopHint));
     }
 
-    void fixedProviderReturnsOnlyThePlaceholder()
+    void fixedProviderReturnsTheConfiguredFixture()
     {
         qRegisterMetaType<Quote>();
-        FixedQuoteProvider provider;
+        FixedQuoteProvider provider(QStringLiteral("fixture quote"));
         QSignalSpy spy(&provider, &QuoteProvider::quoteReady);
         provider.requestQuote({QStringLiteral("potato"), QStringLiteral("click"), {}},
                               QUuid::createUuid());
         QTRY_COMPARE(spy.count(), 1);
         const Quote quote = spy.first().at(1).value<Quote>();
-        QCOMPARE(quote.text, QStringLiteral("test balabala"));
+        QCOMPARE(quote.text, QStringLiteral("fixture quote"));
         QVERIFY(quote.sourceUrl.isEmpty());
         QVERIFY(quote.attribution.isEmpty());
+    }
+
+    void localProviderUsesLanguageAndEnvironmentWithoutNetworkMetadata()
+    {
+        qRegisterMetaType<Quote>();
+        bool usesChinese = false;
+        LocalQuoteProvider provider([&usesChinese] { return usesChinese; });
+        QSignalSpy quoteSpy(&provider, &QuoteProvider::quoteReady);
+        const QuoteContext winterNight{QStringLiteral("potato"),
+                                       QStringLiteral("click"),
+                                       QStringLiteral("winter-night")};
+
+        provider.requestQuote(winterNight, QUuid::createUuid());
+        QTRY_COMPARE(quoteSpy.count(), 1);
+        const Quote first = quoteSpy.takeFirst().at(1).value<Quote>();
+        QCOMPARE(first.text, QStringLiteral("It’s getting late—remember to rest, too."));
+        QVERIFY(first.sourceUrl.isEmpty());
+        QVERIFY(first.attribution.isEmpty());
+
+        provider.requestQuote(winterNight, QUuid::createUuid());
+        QTRY_COMPARE(quoteSpy.count(), 1);
+        const Quote second = quoteSpy.takeFirst().at(1).value<Quote>();
+        QCOMPARE(second.text, QStringLiteral("A little company makes winter warmer."));
+        QVERIFY(second.text != first.text);
+
+        usesChinese = true;
+        provider.requestQuote(winterNight, QUuid::createUuid());
+        QTRY_COMPARE(quoteSpy.count(), 1);
+        const Quote translated = quoteSpy.takeFirst().at(1).value<Quote>();
+        QCOMPARE(translated.text, QStringLiteral("夜深啦，也别忘了休息。"));
     }
 };
 

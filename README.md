@@ -4,9 +4,9 @@ Potato is a lightweight, local-first macOS desktop pet for Apple Silicon.
 
 It lives in the menu bar and provides a transparent primary-screen pet window,
 directional drag animation, three-edge poses, click reactions, seasonal and
-day/night resources, optional activity-only typing animation, and reduced-motion
-support. It does not monitor tasks, roam on its own, use location or weather,
-or make network requests.
+day/night resources, local bilingual click messages, optional activity-only
+typing animation, and reduced-motion support. It does not monitor tasks, roam
+on its own, use location or weather, or make network requests.
 
 Architecture and privacy boundaries are recorded in `docs/PROJECT.md`.
 
