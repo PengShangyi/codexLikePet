@@ -427,5 +427,6 @@ private slots:
     }
 };
 
-QTEST_MAIN(SettingsWindowTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createSettingsWindowTest() { return new SettingsWindowTest; }
 #include "test_settings_window.moc"

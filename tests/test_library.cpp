@@ -46,6 +46,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(LibraryTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createLibraryTest() { return new LibraryTest; }
 
 #include "test_library.moc"

@@ -192,5 +192,6 @@ private slots:
     }
 };
 
-QTEST_MAIN(ThemeTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createThemeTest() { return new ThemeTest; }
 #include "test_theme.moc"

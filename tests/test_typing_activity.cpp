@@ -64,6 +64,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(TypingActivityTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createTypingActivityTest() { return new TypingActivityTest; }
 
 #include "test_typing_activity.moc"

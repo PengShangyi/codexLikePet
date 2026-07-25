@@ -264,6 +264,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(SettingsTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createSettingsTest() { return new SettingsTest; }
 
 #include "test_settings.moc"

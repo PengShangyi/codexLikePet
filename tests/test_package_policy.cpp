@@ -145,6 +145,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(PackagePolicyTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createPackagePolicyTest() { return new PackagePolicyTest; }
 
 #include "test_package_policy.moc"

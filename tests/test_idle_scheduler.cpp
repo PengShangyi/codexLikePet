@@ -91,6 +91,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(IdleSchedulerTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createIdleSchedulerTest() { return new IdleSchedulerTest; }
 
 #include "test_idle_scheduler.moc"

@@ -58,6 +58,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(LoginItemTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createLoginItemTest() { return new LoginItemTest; }
 
 #include "test_login_item.moc"

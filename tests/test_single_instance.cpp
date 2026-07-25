@@ -29,6 +29,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(SingleInstanceTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createSingleInstanceTest() { return new SingleInstanceTest; }
 
 #include "test_single_instance.moc"

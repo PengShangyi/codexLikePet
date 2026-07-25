@@ -261,6 +261,7 @@ private:
     QTemporaryDir m_temp;
 };
 
-QTEST_GUILESS_MAIN(AtlasTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createAtlasTest() { return new AtlasTest; }
 
 #include "test_atlas.moc"

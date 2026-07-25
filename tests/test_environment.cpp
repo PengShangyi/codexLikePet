@@ -115,6 +115,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(EnvironmentTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createEnvironmentTest() { return new EnvironmentTest; }
 
 #include "test_environment.moc"

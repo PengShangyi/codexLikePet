@@ -235,5 +235,6 @@ private:
     Localization *m_localization = nullptr;
 };
 
-QTEST_MAIN(UiKitTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createUiKitTest() { return new UiKitTest; }
 #include "test_ui_kit.moc"

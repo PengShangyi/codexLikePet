@@ -100,6 +100,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(WindowPlacementTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createWindowPlacementTest() { return new WindowPlacementTest; }
 
 #include "test_window_placement.moc"

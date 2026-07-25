@@ -27,6 +27,7 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(WindowOverlayTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createWindowOverlayTest() { return new WindowOverlayTest; }
 
 #include "test_window_overlay.moc"

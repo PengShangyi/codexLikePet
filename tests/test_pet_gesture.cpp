@@ -91,6 +91,7 @@ private slots:
 
 const QRect PetGestureTest::kAvailable{0, 0, 1000, 800};
 
-QTEST_GUILESS_MAIN(PetGestureTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createPetGestureTest() { return new PetGestureTest; }
 
 #include "test_pet_gesture.moc"

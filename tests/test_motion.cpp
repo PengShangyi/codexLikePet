@@ -41,6 +41,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(MotionTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createMotionTest() { return new MotionTest; }
 
 #include "test_motion.moc"

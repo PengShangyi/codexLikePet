@@ -320,6 +320,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(PackageValidatorTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createPackageValidatorTest() { return new PackageValidatorTest; }
 
 #include "test_package_validator.moc"

@@ -110,8 +110,8 @@ done
 if [[ "$UPDATE" == "true" ]]; then
     {
         print "# Recorded by scripts/check-leaks.sh --update."
-        print "# Qt keeps singletons alive to process exit, so these are ceilings, not"
-        print "# targets. A rise is ours to explain; review any diff here carefully."
+        print "# Ceilings, not targets. Every binary reports zero today; a non-zero entry"
+        print "# needs a reason in the commit message that introduced it."
         for entry in ${(o)MEASURED}; do print -r -- "$entry"; done
     } > "$BASELINE"
     print "Wrote $BASELINE"

@@ -245,6 +245,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(PackageImporterTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createPackageImporterTest() { return new PackageImporterTest; }
 
 #include "test_package_importer.moc"

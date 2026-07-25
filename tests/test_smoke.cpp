@@ -15,7 +15,8 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(SmokeTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createSmokeTest() { return new SmokeTest; }
 
 #include "test_smoke.moc"
 

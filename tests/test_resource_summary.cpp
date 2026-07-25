@@ -90,6 +90,7 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(ResourceSummaryTest)
+// Runs inside a grouped binary; see tests/support/TestRunner.h.
+QObject *createResourceSummaryTest() { return new ResourceSummaryTest; }
 
 #include "test_resource_summary.moc"
