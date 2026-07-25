@@ -34,7 +34,9 @@ PetImportResult PetPackageImporter::importPath(const QString &path) const
         return result;
     }
 
-    result.validation = PetPackageValidator().validateDirectory(validationRoot);
+    // Trust boundary: untrusted input gets the full decode-and-inspect pass.
+    result.validation = PetPackageValidator().validateDirectory(validationRoot,
+                                                                ValidationDepth::Full);
     if (!result.validation.isValid()) {
         result.error = result.validation.errorMessages().join(QLatin1Char('\n'));
         return result;

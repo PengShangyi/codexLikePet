@@ -55,10 +55,11 @@ void AnimationPlayer::setClip(QSharedPointer<AnimationClip> clip,
 
 void AnimationPlayer::setSpeedFactor(double factor)
 {
+    // Deliberately does NOT reschedule: the frame timer is single-shot, so
+    // restarting it here meant a continuously-dragged speed slider reset the
+    // pending frame before it could ever fire and the pet froze mid-drag. The
+    // new factor takes effect at the next frame boundary instead (<= 320ms).
     m_speedFactor = std::clamp(factor, 0.5, 2.0);
-    if (m_shouldRun && !m_reducedMotion) {
-        scheduleNextFrame();
-    }
 }
 
 void AnimationPlayer::setReducedMotion(bool reduced)

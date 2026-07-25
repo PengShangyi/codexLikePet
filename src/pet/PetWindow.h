@@ -62,6 +62,10 @@ private:
     QRect primaryAvailableGeometry() const;
     void updateWindowSize();
     void updateSnapEdge(SnapEdge edge);
+    // Position-only half of clampToPrimaryScreen(): clamps and re-resolves the
+    // snap edge without touching the native window level. The public slot adds
+    // the overlay re-push, which is only needed for display/wake events.
+    void clampPosition();
 
     QImage m_frame;
     double m_scaleFactor = 1.0;

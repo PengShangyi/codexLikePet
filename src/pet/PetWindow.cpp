@@ -92,7 +92,9 @@ void PetWindow::setScaleFactor(double factor)
     m_scaleFactor = factor;
     updateWindowSize();
     if (previousEdge == SnapEdge::None) {
-        clampToPrimaryScreen();
+        // clampPosition(), not clampToPrimaryScreen(): resizing does not recreate
+        // the native window, and the slider drives this once per step.
+        clampPosition();
     } else {
         move(WindowPlacement::snappedPosition(previousEdge,
                                                pos(),
@@ -154,7 +156,7 @@ void PetWindow::restorePosition()
     updateSnapEdge(WindowPlacement::resolveSnapEdge(position, size(), available, 0));
 }
 
-void PetWindow::clampToPrimaryScreen()
+void PetWindow::clampPosition()
 {
     const QPoint constrained = WindowPlacement::clampToAvailableGeometry(pos(),
                                                                           size(),
@@ -163,6 +165,11 @@ void PetWindow::clampToPrimaryScreen()
         move(constrained);
     }
     updateSnapEdge(WindowPlacement::resolveSnapEdge(pos(), size(), primaryAvailableGeometry(), 0));
+}
+
+void PetWindow::clampToPrimaryScreen()
+{
+    clampPosition();
     // Display events that reach here (screen swap, resolution/scale change, dock
     // or menu-bar reflow, wake) can recreate the native window and reset its level
     // to Qt's default. Re-push the overlay level so every such event keeps the pet

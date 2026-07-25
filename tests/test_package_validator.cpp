@@ -224,6 +224,95 @@ private slots:
         QVERIFY(result.errorMessages().join(QLatin1Char(' ')).contains(QStringLiteral("1MiB")));
     }
 
+    // Metadata depth skips only the pixel-level decode. A package whose atlas is
+    // structurally referenced but pixel-invalid lists fine (the failure resurfaces
+    // at load time) while the Full pass still rejects it.
+    void metadataDepthSkipsOnlyThePixelDecode()
+    {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const QString atlasPath = temp.filePath(QStringLiteral("spritesheet.png"));
+        QVERIFY(writeValidAtlas(atlasPath));
+        QImage image(atlasPath);
+        image.setPixelColor(7 * PetAtlas::CellWidth + 5, 5, Qt::red); // opaque unused cell
+        QVERIFY(image.save(atlasPath));
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("pet.json")), validPetManifest()));
+
+        const PetPackageValidator validator;
+        const PackageValidationResult full =
+            validator.validateDirectory(temp.path(), ValidationDepth::Full);
+        QVERIFY(!full.isValid());
+        QVERIFY(full.errorMessages().join(QLatin1Char(' ')).contains(QStringLiteral("Unused cell")));
+
+        const PackageValidationResult metadata =
+            validator.validateDirectory(temp.path(), ValidationDepth::Metadata);
+        QVERIFY2(metadata.isValid(), qPrintable(metadata.errorMessages().join('\n')));
+        // The manifest is still fully parsed, so the library can list the pet.
+        QCOMPARE(metadata.package.id, QStringLiteral("potato-test"));
+        QCOMPARE(metadata.package.spriteSheetPath, QStringLiteral("spritesheet.png"));
+    }
+
+    // Every *safety* rule must hold at Metadata depth too -- this is the guard
+    // against the depth split quietly becoming a way to bypass the envelope.
+    void metadataDepthStillEnforcesEverySafetyRule()
+    {
+        const PetPackageValidator validator;
+
+        QTemporaryDir traversal;
+        QVERIFY(traversal.isValid());
+        QJsonObject escaping = validPetManifest();
+        escaping[QStringLiteral("spritesheetPath")] = QStringLiteral("../outside.png");
+        QVERIFY(writeJson(traversal.filePath(QStringLiteral("pet.json")), escaping));
+        QString errors = validator.validateDirectory(traversal.path(), ValidationDepth::Metadata)
+                             .errorMessages()
+                             .join(QLatin1Char(' '));
+        QVERIFY(errors.contains(QStringLiteral("escapes")));
+
+        QTemporaryDir envelope;
+        QVERIFY(envelope.isValid());
+        QVERIFY(writeValidAtlas(envelope.filePath(QStringLiteral("spritesheet.png"))));
+        QVERIFY(writeJson(envelope.filePath(QStringLiteral("pet.json")), validPetManifest()));
+        QFile payload(envelope.filePath(QStringLiteral("payload.bin")));
+        QVERIFY(payload.open(QIODevice::WriteOnly));
+        QVERIFY(payload.write("bad") > 0);
+        payload.close();
+        QVERIFY(payload.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                       | QFileDevice::ExeOwner));
+        QVERIFY(QFile::link(envelope.filePath(QStringLiteral("spritesheet.png")),
+                            envelope.filePath(QStringLiteral("linked.png"))));
+        QVERIFY(writeJson(envelope.filePath(QStringLiteral("unused.json")), QJsonObject{}));
+        errors = validator.validateDirectory(envelope.path(), ValidationDepth::Metadata)
+                     .errorMessages()
+                     .join(QLatin1Char(' '));
+        QVERIFY(errors.contains(QStringLiteral("Unsupported file")));
+        QVERIFY(errors.contains(QStringLiteral("Executable")));
+        QVERIFY(errors.contains(QStringLiteral("Symbolic links")));
+        QVERIFY(errors.contains(QStringLiteral("Unreferenced file")));
+
+        // Clip geometry and durations come from the image header, not a decode,
+        // so they stay enforced at Metadata depth.
+        QTemporaryDir clips;
+        QVERIFY(clips.isValid());
+        QVERIFY(writeValidAtlas(clips.filePath(QStringLiteral("spritesheet.png"))));
+        QVERIFY(writeJson(clips.filePath(QStringLiteral("pet.json")), validPetManifest()));
+        QImage wide(9 * PetAtlas::CellWidth, PetAtlas::CellHeight, QImage::Format_RGBA8888);
+        wide.fill(Qt::transparent);
+        QVERIFY(wide.save(clips.filePath(QStringLiteral("too-wide.png"))));
+        QJsonArray durations;
+        for (int index = 0; index < 9; ++index) durations.append(100);
+        QVERIFY(writeJson(clips.filePath(QStringLiteral("potato.json")),
+                          {{QStringLiteral("schemaVersion"), 1},
+                           {QStringLiteral("clips"),
+                            QJsonObject{{QStringLiteral("click"),
+                                         QJsonObject{{QStringLiteral("path"),
+                                                      QStringLiteral("too-wide.png")},
+                                                     {QStringLiteral("durationsMs"), durations}}}}}}));
+        errors = validator.validateDirectory(clips.path(), ValidationDepth::Metadata)
+                     .errorMessages()
+                     .join(QLatin1Char(' '));
+        QVERIFY(errors.contains(QStringLiteral("1 to 8")));
+    }
+
     void rejectsDirectoryEntryAndExpandedSizeLimits()
     {
         QTemporaryDir entries;

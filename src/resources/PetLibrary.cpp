@@ -86,7 +86,13 @@ void PetLibrary::scanRoot(const QString &root,
                                                             QDir::Name | QDir::IgnoreCase);
     PetPackageValidator validator;
     for (const QFileInfo &child : children) {
-        const PackageValidationResult validation = validator.validateDirectory(child.absoluteFilePath());
+        // Metadata depth: listing needs the manifest and the safety envelope, not
+        // a pixel-level decode of every atlas and clip. The deep check runs at the
+        // trust boundary (PetPackageImporter / PetStore::install); anything that
+        // still fails to decode is caught by PetAtlas/AnimationClip::load and
+        // surfaced through the pet-load error path. See ValidationDepth.
+        const PackageValidationResult validation =
+            validator.validateDirectory(child.absoluteFilePath(), ValidationDepth::Metadata);
         if (validation.isValid()) {
             records->insert(validation.package.id, {validation.package, builtIn});
         }

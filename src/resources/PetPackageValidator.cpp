@@ -34,7 +34,8 @@ QVector<int> parseDurations(const QJsonValue &value)
 }
 }
 
-PackageValidationResult PetPackageValidator::validateDirectory(const QString &directoryPath) const
+PackageValidationResult PetPackageValidator::validateDirectory(const QString &directoryPath,
+                                                               ValidationDepth depth) const
 {
     PackageValidationResult result;
     const QFileInfo rootInfo(directoryPath);
@@ -78,7 +79,7 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
     if (petObject.value(QStringLiteral("spriteVersionNumber")).toInt() != 2) {
         addIssue(&result, QStringLiteral("pet.version"), QStringLiteral("spriteVersionNumber must be 2"));
     }
-    validateAtlas(rootPath, result.package.spriteSheetPath, &result, QStringLiteral("base"));
+    validateAtlas(rootPath, result.package.spriteSheetPath, &result, QStringLiteral("base"), depth);
 
     const QString potatoPath = QDir(rootPath).filePath(QStringLiteral("potato.json"));
     const bool hasPotatoManifest = QFileInfo::exists(potatoPath);
@@ -87,7 +88,7 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
         if (!readJsonObject(potatoPath, &potatoObject, &error)) {
             addIssue(&result, QStringLiteral("potato.manifest"), error, QStringLiteral("potato.json"));
         } else {
-            parsePotatoManifest(rootPath, potatoObject, &result);
+            parsePotatoManifest(rootPath, potatoObject, &result, depth);
         }
     }
     validateKnownFiles(rootPath, result.package, hasPotatoManifest, &result);
@@ -170,7 +171,8 @@ bool PetPackageValidator::isKnownClipKey(const QString &key)
 
 void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
                                               const QJsonObject &object,
-                                              PackageValidationResult *result) const
+                                              PackageValidationResult *result,
+                                              ValidationDepth depth) const
 {
     if (object.value(QStringLiteral("schemaVersion")).toInt() != 1) {
         addIssue(result, QStringLiteral("potato.version"), QStringLiteral("potato.json schemaVersion must be 1"));
@@ -214,7 +216,7 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
         }
         const QString path = iterator.value().toString();
         result->package.variants.insert(iterator.key(), path);
-        validateAtlas(rootPath, path, result, QStringLiteral("variant %1").arg(iterator.key()));
+        validateAtlas(rootPath, path, result, QStringLiteral("variant %1").arg(iterator.key()), depth);
     }
 
     const QJsonValue clipsValue = object.value(QStringLiteral("clips"));
@@ -227,7 +229,8 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
                clipsValue.toObject(),
                &result->package.clips,
                result,
-               QStringLiteral("base"));
+               QStringLiteral("base"),
+               depth);
 
     const QJsonValue variantClipsValue = object.value(QStringLiteral("variantClips"));
     if (!variantClipsValue.isUndefined() && !variantClipsValue.isObject()) {
@@ -255,7 +258,8 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
                    iterator.value().toObject(),
                    &destination,
                    result,
-                   QStringLiteral("variant %1").arg(iterator.key()));
+                   QStringLiteral("variant %1").arg(iterator.key()),
+                   depth);
     }
 }
 
@@ -263,7 +267,8 @@ void PetPackageValidator::parseClips(const QString &rootPath,
                                      const QJsonObject &object,
                                      QHash<QString, ClipDefinition> *clips,
                                      PackageValidationResult *result,
-                                     const QString &context) const
+                                     const QString &context,
+                                     ValidationDepth depth) const
 {
     for (auto iterator = object.begin(); iterator != object.end(); ++iterator) {
         if (!isKnownClipKey(iterator.key())) {
@@ -291,14 +296,15 @@ void PetPackageValidator::parseClips(const QString &rootPath,
         ClipDefinition clip{definition.value(QStringLiteral("path")).toString(),
                             parseDurations(definition.value(QStringLiteral("durationsMs")))};
         clips->insert(iterator.key(), clip);
-        validateClip(rootPath, iterator.key(), clip, result, context);
+        validateClip(rootPath, iterator.key(), clip, result, context, depth);
     }
 }
 
 void PetPackageValidator::validateAtlas(const QString &rootPath,
                                         const QString &relativePath,
                                         PackageValidationResult *result,
-                                        const QString &context) const
+                                        const QString &context,
+                                        ValidationDepth depth) const
 {
     QString error;
     if (!isSafeRelativePath(rootPath, relativePath, &error)) {
@@ -308,6 +314,7 @@ void PetPackageValidator::validateAtlas(const QString &rootPath,
                  relativePath);
         return;
     }
+    if (depth == ValidationDepth::Metadata) return;  // decoding is the Full-only part
     PetAtlas atlas;
     if (!atlas.load(QDir(rootPath).filePath(relativePath))) {
         addIssue(result,
@@ -328,7 +335,8 @@ void PetPackageValidator::validateClip(const QString &rootPath,
                                        const QString &name,
                                        const ClipDefinition &clip,
                                        PackageValidationResult *result,
-                                       const QString &context) const
+                                       const QString &context,
+                                       ValidationDepth depth) const
 {
     QString error;
     if (!isSafeRelativePath(rootPath, clip.path, &error)) {
@@ -351,14 +359,17 @@ void PetPackageValidator::validateClip(const QString &rootPath,
                  clip.path);
         return;
     }
-    const QImage image = reader.read();
-    if (image.isNull() || !image.hasAlphaChannel()) {
-        addIssue(result,
-                 QStringLiteral("clip.geometry"),
-                 QStringLiteral("%1 %2 clip must be transparent and use 192x208 cells")
-                     .arg(context, name),
-                 clip.path);
-        return;
+    // Decoding is the Full-only part; the geometry above came from the header.
+    if (depth == ValidationDepth::Full) {
+        const QImage image = reader.read();
+        if (image.isNull() || !image.hasAlphaChannel()) {
+            addIssue(result,
+                     QStringLiteral("clip.geometry"),
+                     QStringLiteral("%1 %2 clip must be transparent and use 192x208 cells")
+                         .arg(context, name),
+                     clip.path);
+            return;
+        }
     }
     if (clip.durationsMs.size() != frames) {
         addIssue(result,

@@ -102,6 +102,33 @@ private slots:
         player.stop();
     }
 
+    // Regression: the speed slider emits one setSpeedFactor per step. When that
+    // restarted the single-shot frame timer, a continuous drag reset the pending
+    // frame before it could fire and the pet froze for the whole drag.
+    void repeatedSpeedChangesDoNotStallPlayback()
+    {
+        const QString path = m_temp.filePath(QStringLiteral("speed-clip.png"));
+        QImage strip(PetAtlas::CellWidth * 2, PetAtlas::CellHeight, QImage::Format_RGBA8888);
+        strip.fill(QColor(30, 90, 120, 200));
+        QVERIFY(strip.save(path));
+        auto clip = QSharedPointer<AnimationClip>::create();
+        QVERIFY(clip->load(path, {50, 50}));
+
+        AnimationPlayer player;
+        QSignalSpy loopSpy(&player, &AnimationPlayer::clipLoopCompleted);
+        player.setClip(clip, QStringLiteral("typing"));
+        player.start();
+
+        // Stand in for a drag: change the speed far more often than the 50ms
+        // frame interval. Playback must still advance.
+        for (int step = 0; step < 40; ++step) {
+            player.setSpeedFactor(0.5 + (step % 16) * 0.1);
+            QTest::qWait(5);
+        }
+        QVERIFY2(loopSpy.count() >= 1, "playback stalled while the speed kept changing");
+        player.stop();
+    }
+
     void reducedMotionKeepsAnExtensionClipOnItsRepresentativeFrame()
     {
         const QString path = m_temp.filePath(QStringLiteral("reduced-clip.png"));

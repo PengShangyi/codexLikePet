@@ -59,7 +59,10 @@ bool PetStore::install(const PackageValidationResult &validation,
         removePathWithoutFollowingLinks(stagePath);
         return false;
     }
-    const PackageValidationResult staged = PetPackageValidator().validateDirectory(stagePath);
+    // Full depth: this recheck exists to catch a package that changed between the
+    // caller's validation and this copy, so it must not trust the earlier verdict.
+    const PackageValidationResult staged =
+        PetPackageValidator().validateDirectory(stagePath, ValidationDepth::Full);
     if (!staged.isValid() || staged.package.id != validation.package.id) {
         removePathWithoutFollowingLinks(stagePath);
         *error = staged.isValid()

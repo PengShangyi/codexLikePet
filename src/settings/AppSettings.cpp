@@ -202,7 +202,11 @@ template<typename T>
 bool AppSettings::writeIfChanged(const QString &key, const T &value, const T &current)
 {
     if (value == current) return false;
+    // No sync() here on purpose. Sliders emit one write per step, so flushing on
+    // every write turned a single drag into ~150 disk flushes. QSettings persists
+    // on destruction, and the native macOS backend hands writes to cfprefsd
+    // immediately. The two places that genuinely need an immediate flush --
+    // migrate() and setOnboardingCompleted() -- still call sync() explicitly.
     m_settings->setValue(key, QVariant::fromValue(value));
-    m_settings->sync();
     return true;
 }
