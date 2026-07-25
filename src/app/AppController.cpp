@@ -6,6 +6,7 @@
 #include "settings/AppSettings.h"
 #include "settings/Localization.h"
 #include "settings/SettingsWindow.h"
+#include "ui/Theme.h"
 #include "settings/OnboardingWindow.h"
 #include "settings/AboutWindow.h"
 #include "pet/AnimationPlayer.h"
@@ -50,10 +51,10 @@ QIcon makeTrayIcon()
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(QColor(63, 45, 33), 2.0));
-    painter.setBrush(QColor(205, 154, 92));
+    painter.setPen(QPen(Theme::brandOutline(), 2.0));
+    painter.setBrush(Theme::brandPotato());
     painter.drawEllipse(QRectF(5, 7, 26, 22));
-    painter.setBrush(QColor(63, 45, 33));
+    painter.setBrush(Theme::brandOutline());
     painter.drawEllipse(QRectF(12, 15, 3, 3));
     painter.drawEllipse(QRectF(22, 15, 3, 3));
     painter.drawArc(QRectF(15, 16, 8, 7), 200 * 16, 140 * 16);
@@ -178,6 +179,13 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
     });
     connect(m_settings, &AppSettings::alwaysOnTopChanged,
             m_speechBubble.get(), &SpeechBubble::setAlwaysOnTop);
+    // A second watcher rather than borrowing the settings window's: ThemeWatcher is a
+    // stateless observer of one global, so two cost one connection each and neither
+    // owner has to reach into the other.
+    m_bubbleTheme = new ThemeWatcher(this);
+    m_speechBubble->setColorScheme(m_bubbleTheme->scheme());
+    connect(m_bubbleTheme, &ThemeWatcher::schemeChanged,
+            m_speechBubble.get(), &SpeechBubble::setColorScheme);
     connect(m_typingDetector, &TypingActivityDetector::typingChanged, m_behavior, &BehaviorController::setTypingActive);
     // Per-keystroke press. Connected AFTER the detector (which is constructed first),
     // so on each key the detector's transition to the Typing state runs before this

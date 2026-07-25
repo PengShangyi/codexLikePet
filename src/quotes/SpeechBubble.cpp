@@ -1,5 +1,7 @@
 #include "quotes/SpeechBubble.h"
 
+#include "ui/Theme.h"
+
 #include "pet/WindowPlacement.h"
 #include "platform/WindowOverlay.h"
 
@@ -71,16 +73,28 @@ QPoint SpeechBubble::placementFor(const QSize &bubbleSize,
     return WindowPlacement::clampToAvailableGeometry(proposed, bubbleSize, availableGeometry);
 }
 
+void SpeechBubble::setColorScheme(Qt::ColorScheme scheme)
+{
+    if (m_scheme == scheme) return;
+    m_scheme = scheme;
+    update();
+}
+
 void SpeechBubble::paintEvent(QPaintEvent *)
 {
+    // Receives an already-resolved scheme, like the pet preview: the bubble is a
+    // renderer and does not observe the system appearance itself.
+    const Theme::Palette palette = Theme::palette(m_scheme);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     QPainterPath path;
-    path.addRoundedRect(rect().adjusted(1, 1, -1, -1), 14, 14);
-    painter.fillPath(path, QColor(255, 252, 244, 245));
-    painter.setPen(QPen(QColor(94, 67, 45), 1.5));
+    path.addRoundedRect(rect().adjusted(1, 1, -1, -1),
+                        Theme::Metrics::bubbleRadius,
+                        Theme::Metrics::bubbleRadius);
+    painter.fillPath(path, palette.bubbleFill);
+    painter.setPen(QPen(palette.bubbleBorder, Theme::Metrics::bubbleBorderWidth));
     painter.drawPath(path);
-    painter.setPen(QColor(50, 38, 30));
+    painter.setPen(palette.bubbleText);
     painter.drawText(rect().adjusted(16, 10, -16, -10),
                      Qt::TextWordWrap | Qt::AlignCenter,
                      m_text);

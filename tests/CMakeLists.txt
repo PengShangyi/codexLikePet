@@ -99,6 +99,28 @@ target_link_libraries(potato_settings_test PRIVATE potato_settings_core
     Qt6::Core Qt6::Test)
 add_test(NAME potato_settings_test COMMAND potato_settings_test)
 
+qt_add_executable(potato_theme_test
+    test_theme.cpp
+)
+target_include_directories(potato_theme_test PRIVATE ../src)
+target_link_libraries(potato_theme_test PRIVATE potato_theme
+    Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME potato_theme_test COMMAND potato_theme_test)
+set_tests_properties(potato_theme_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+qt_add_executable(potato_ui_kit_test
+    test_ui_kit.cpp
+)
+target_include_directories(potato_ui_kit_test PRIVATE ../src)
+target_link_libraries(potato_ui_kit_test PRIVATE potato_ui potato_theme potato_settings_core
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+add_test(NAME potato_ui_kit_test COMMAND potato_ui_kit_test)
+set_tests_properties(potato_ui_kit_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 qt_add_executable(potato_settings_window_test
     test_settings_window.cpp
     ../src/settings/SettingsWindow.cpp
@@ -135,7 +157,7 @@ qt_add_executable(potato_behavior_test
     ../src/platform/MacWindowOverlay.mm
 )
 target_include_directories(potato_behavior_test PRIVATE ../src)
-target_link_libraries(potato_behavior_test PRIVATE potato_geometry potato_overlay
+target_link_libraries(potato_behavior_test PRIVATE potato_geometry potato_overlay potato_theme
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test "-framework AppKit")
 add_test(NAME potato_behavior_test COMMAND potato_behavior_test)
 
@@ -157,7 +179,7 @@ qt_add_executable(potato_pet_overlay_test
 )
 target_include_directories(potato_pet_overlay_test PRIVATE ../src)
 target_link_libraries(potato_pet_overlay_test PRIVATE
-    potato_geometry potato_overlay potato_settings_core
+    potato_geometry potato_overlay potato_settings_core potato_theme
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test "-framework AppKit")
 add_test(NAME potato_pet_overlay_test COMMAND potato_pet_overlay_test)
 
@@ -287,6 +309,7 @@ target_compile_definitions(potato_app_controller_test PRIVATE
 )
 target_link_libraries(potato_app_controller_test PRIVATE
     potato_settings_core potato_atlas potato_geometry potato_package potato_policy potato_environment potato_overlay
+    potato_theme
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test miniz
     "-framework AppKit"
     "-framework ApplicationServices"

@@ -4,6 +4,7 @@
 #include "pet/WindowPlacement.h"
 #include "platform/WindowOverlay.h"
 #include "settings/AppSettings.h"
+#include "ui/Theme.h"
 
 #include <QContextMenuEvent>
 #include <QGuiApplication>
@@ -205,10 +206,10 @@ void PetWindow::paintEvent(QPaintEvent *)
 
     // Defensive fallback used only when no validated pet frame is available.
     const QRectF body(width() * 0.17, height() * 0.18, width() * 0.66, height() * 0.68);
-    painter.setPen(QPen(QColor(86, 57, 38), std::max(2.0, width() / 80.0)));
-    painter.setBrush(QColor(205, 154, 92));
+    painter.setPen(QPen(Theme::brandOutline(), std::max(2.0, width() / 80.0)));
+    painter.setBrush(Theme::brandPotato());
     painter.drawEllipse(body);
-    painter.setBrush(QColor(68, 47, 35));
+    painter.setBrush(Theme::brandOutline());
     painter.drawEllipse(QRectF(width() * 0.37, height() * 0.45, width() * 0.035, width() * 0.035));
     painter.drawEllipse(QRectF(width() * 0.60, height() * 0.45, width() * 0.035, width() * 0.035));
     painter.drawArc(QRectF(width() * 0.43, height() * 0.48, width() * 0.16, height() * 0.10),

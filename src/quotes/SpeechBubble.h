@@ -13,6 +13,7 @@ public:
     explicit SpeechBubble(QWidget *parent = nullptr);
 
     void setAlwaysOnTop(bool enabled);
+    void setColorScheme(Qt::ColorScheme scheme);
     void showMessage(const QString &text,
                      const QRect &petGeometry,
                      const QRect &availableGeometry,
@@ -28,6 +29,7 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 private:
+    Qt::ColorScheme m_scheme = Qt::ColorScheme::Light;
     QString m_text;
     QTimer *m_hideTimer;
 };

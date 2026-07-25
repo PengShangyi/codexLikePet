@@ -60,6 +60,25 @@ potato_add_library(potato_settings_core
             src/settings/Localization.cpp src/settings/Localization.h
     LINK Qt6::Core)
 
+# Colors, metrics, fonts, and the generated stylesheet. Gui-only and free of
+# Localization so the tray icon, the pet's fallback drawing, and the speech
+# bubble can share the brand palette without dragging in the settings UI.
+potato_add_library(potato_theme
+    SOURCES src/ui/Theme.cpp src/ui/Theme.h
+    LINK Qt6::Core Qt6::Gui)
+
+# The settings design system: cards, rows, and the few compound controls they are
+# built from. Separate from potato_theme so a Gui-only consumer of the palette does
+# not acquire a Widgets and Localization dependency it has no use for.
+potato_add_library(potato_ui
+    SOURCES src/ui/SettingsRow.cpp src/ui/SettingsRow.h
+            src/ui/SettingsCard.cpp src/ui/SettingsCard.h
+            src/ui/SettingsPage.cpp src/ui/SettingsPage.h
+            src/ui/ValueSlider.cpp src/ui/ValueSlider.h
+            src/ui/InlineBanner.cpp src/ui/InlineBanner.h
+            src/ui/Disclosure.cpp src/ui/Disclosure.h
+    LINK Qt6::Core Qt6::Gui Qt6::Widgets potato_theme potato_settings_core)
+
 potato_add_library(potato_environment
     SOURCES src/environment/EnvironmentClock.cpp src/environment/EnvironmentClock.h
             src/environment/EnvironmentResolver.cpp src/environment/EnvironmentResolver.h
@@ -94,6 +113,8 @@ potato_add_library(potato_overlay
 
 set(POTATO_LIBRARIES
     potato_settings_core
+    potato_theme
+    potato_ui
     potato_environment
     potato_geometry
     potato_atlas

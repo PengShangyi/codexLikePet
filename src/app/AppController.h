@@ -35,6 +35,7 @@ class TypingAnimationDriver;
 class AppNotifier;
 class QuoteProvider;
 class SpeechBubble;
+class ThemeWatcher;
 class InputActivitySource;
 class TypingActivityDetector;
 class EnvironmentClock;
@@ -160,6 +161,7 @@ private:
     LoginItemCoordinator *m_loginItemCoordinator;
     // Owns the keystroke-driven typing animation state and its relax timer.
     TypingAnimationDriver *m_typingDriver;
+    ThemeWatcher *m_bubbleTheme = nullptr;
     QTimer *m_clickCompletionTimer;
     bool m_suppressSystemMutations = false;
     bool m_sleeping = false;
