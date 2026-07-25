@@ -127,10 +127,13 @@ qt_add_executable(potato_settings_window_test
     ../src/settings/SettingsWindow.h
     ../src/settings/PetPreviewWidget.cpp
     ../src/settings/PetPreviewWidget.h
+    ../src/platform/SystemSymbols.h
+    ../src/platform/MacSystemSymbols.mm
 )
 target_include_directories(potato_settings_window_test PRIVATE ../src)
 target_link_libraries(potato_settings_window_test PRIVATE potato_settings_core potato_atlas
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+    potato_ui potato_theme potato_geometry
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test "-framework AppKit")
 add_test(NAME potato_settings_window_test COMMAND potato_settings_window_test)
 set_tests_properties(potato_settings_window_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
@@ -296,6 +299,8 @@ qt_add_executable(potato_app_controller_test
     ../src/platform/MacSystemActivitySource.h
     ../src/platform/MacApplication.mm
     ../src/platform/MacApplication.h
+    ../src/platform/SystemSymbols.h
+    ../src/platform/MacSystemSymbols.mm
     ../src/platform/MacWindowOverlay.mm
     ../src/login/LoginItemController.h
     ../src/login/LoginItemCoordinator.cpp
@@ -309,7 +314,7 @@ target_compile_definitions(potato_app_controller_test PRIVATE
 )
 target_link_libraries(potato_app_controller_test PRIVATE
     potato_settings_core potato_atlas potato_geometry potato_package potato_policy potato_environment potato_overlay
-    potato_theme
+    potato_ui potato_theme
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test miniz
     "-framework AppKit"
     "-framework ApplicationServices"

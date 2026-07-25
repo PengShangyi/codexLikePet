@@ -137,6 +137,36 @@ private slots:
         QVERIFY(!cleared.hasWindowPosition());
     }
 
+    // Moved out of potato_settings_window_test, which used to assert these strings
+    // while claiming to test the window's layout. Copy is a localization fact, and
+    // asserting it here means editing a label no longer breaks a widget test.
+    void everyTextKeyHasBothLanguages()
+    {
+        QTemporaryDir temp;
+        AppSettings settings(temp.filePath(QStringLiteral("settings.ini")));
+        settings.setLanguage(AppLanguage::English);
+        Localization localization(&settings);
+
+        QCOMPARE(localization.text(TextKey::PreviewVariant), QStringLiteral("Preview atlas"));
+        QCOMPARE(localization.text(TextKey::PreviewAnimation), QStringLiteral("Preview animation"));
+
+        // Localization::text() has no default: label, so -Wswitch catches a new
+        // TextKey with no case -- but the fallthrough returns an empty string, and
+        // nothing else would notice. Sweep the whole enum for both languages.
+        const int lastKey = static_cast<int>(TextKey::UseStandardAnimation);
+        for (int raw = 0; raw <= lastKey; ++raw) {
+            const auto key = static_cast<TextKey>(raw);
+            settings.setLanguage(AppLanguage::English);
+            const QString english = localization.text(key);
+            settings.setLanguage(AppLanguage::SimplifiedChinese);
+            const QString chinese = localization.text(key);
+            QVERIFY2(!english.isEmpty(),
+                     qPrintable(QStringLiteral("TextKey %1 has no English string").arg(raw)));
+            QVERIFY2(!chinese.isEmpty(),
+                     qPrintable(QStringLiteral("TextKey %1 has no Chinese string").arg(raw)));
+        }
+    }
+
     // Opacity clamps to a narrower range than scale and speed: never below 0.3,
     // because a fully transparent pet cannot be clicked or found again.
     void opacityClampsToItsOwnNarrowerRange()

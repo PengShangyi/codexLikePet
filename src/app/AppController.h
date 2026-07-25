@@ -112,6 +112,7 @@ private:
     void loadCurrentVariant();
     void configurePetPreview();
     void updateResourceSummary();
+    void updateEnvironmentSummary();
     void loadPreviewAtlas(const QString &relativePath);
     void loadPreviewClip(const QString &key);
     QSharedPointer<AnimationClip> loadClip(const QString &name);
@@ -124,7 +125,6 @@ private:
     QMenu *m_petMenu;
     QAction *m_visibilityAction;
     QAction *m_settingsAction;
-    QAction *m_welcomeAction = nullptr;
     QAction *m_aboutAction = nullptr;
     QAction *m_quitAction;
     AppSettings *m_settings;

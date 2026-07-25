@@ -2,6 +2,7 @@
 
 #include "pet/PetAtlas.h"
 
+#include <QPixmap>
 #include <QSharedPointer>
 #include <QWidget>
 
@@ -20,6 +21,10 @@ public:
     void clear();
     void setReducedMotion(bool reduced);
     void setState(V2AnimationState state);
+    // Receives an already-resolved scheme rather than observing the system itself,
+    // so the painter stays testable without an appearance observer -- the same
+    // arrangement as reduced motion above.
+    void setColorScheme(Qt::ColorScheme scheme);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -29,6 +34,7 @@ protected:
 private:
     void advance();
     void scheduleNextFrame();
+    void renderStage();
 
     QSharedPointer<PetAtlas> m_atlas;
     QSharedPointer<AnimationClip> m_clip;
@@ -37,4 +43,9 @@ private:
     V2AnimationState m_state = V2AnimationState::Idle;
     bool m_smooth = true;
     bool m_reducedMotion = false;
+    Qt::ColorScheme m_scheme = Qt::ColorScheme::Light;
+    // The stage backdrop, rebuilt only on a size, DPR, or scheme change so an
+    // animating preview repaints a pixmap rather than a gradient and a border.
+    QPixmap m_stageCache;
+    Qt::ColorScheme m_stageScheme = Qt::ColorScheme::Light;
 };

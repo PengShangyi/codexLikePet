@@ -132,13 +132,16 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
     connect(m_localization, &Localization::languageChanged, this, &AppController::configurePetPreview);
     // The summary embeds a localized "v2 fallback" label, so it follows language.
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateResourceSummary);
+    connect(m_localization, &Localization::languageChanged, this, &AppController::updateEnvironmentSummary);
     connect(m_settingsWindow.get(), &SettingsWindow::petSelected, this, &AppController::selectPet);
     connect(m_settingsWindow.get(), &SettingsWindow::importPackageRequested, this, [this] { importPet(false); });
     connect(m_settingsWindow.get(), &SettingsWindow::importDirectoryRequested, this, [this] { importPet(true); });
     connect(m_settingsWindow.get(), &SettingsWindow::removePetRequested, this, &AppController::removeSelectedPet);
     connect(m_settingsWindow.get(), &SettingsWindow::previewAtlasSelected, this, &AppController::loadPreviewAtlas);
     connect(m_settingsWindow.get(), &SettingsWindow::previewClipSelected, this, &AppController::loadPreviewClip);
-    connect(m_settingsWindow.get(), &SettingsWindow::aboutRequested, this, &AppController::showAbout);
+    // About stays a tray item only; the settings page carries the welcome guide,
+    // which had been occupying a permanent tray slot for a first-run artefact.
+    connect(m_settingsWindow.get(), &SettingsWindow::welcomeRequested, this, &AppController::showWelcome);
     connect(m_animationPlayer, &AnimationPlayer::frameReady, m_petWindow.get(), &PetWindow::setFrame);
     connect(m_settings, &AppSettings::animationSpeedChanged, m_animationPlayer, &AnimationPlayer::setSpeedFactor);
     connect(m_petWindow.get(), &PetWindow::dragStarted, m_behavior, &BehaviorController::beginDrag);
@@ -198,6 +201,7 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
     connect(m_settings, &AppSettings::typingDetectionEnabledChanged, this, &AppController::setTypingMonitoringEnabled);
     connect(m_environmentResolver, &EnvironmentResolver::environmentChanged, this, [this](const VariantKey &) {
         loadCurrentVariant();
+        updateEnvironmentSummary();
     });
     connect(m_motionController, &MotionController::reducedMotionChanged, m_animationPlayer, &AnimationPlayer::setReducedMotion);
     connect(m_motionController, &MotionController::reducedMotionChanged, m_settingsWindow.get(), &SettingsWindow::setReducedMotion);
@@ -248,13 +252,13 @@ bool AppController::start()
     updateVisibilityAction();
 
     m_petMenu = m_menu->addMenu(QString());
+    m_menu->addSeparator();
 
     m_settingsAction = m_menu->addAction(QString());
     connect(m_settingsAction, &QAction::triggered, this, &AppController::requestSettings);
 
-    m_welcomeAction = m_menu->addAction(QString());
-    connect(m_welcomeAction, &QAction::triggered, this, &AppController::showWelcome);
-
+    // No Welcome Guide item: it is a first-run artefact, and it now lives under
+    // Settings > General > About, which is also where its version row is.
     m_aboutAction = m_menu->addAction(QString());
     connect(m_aboutAction, &QAction::triggered, this, &AppController::showAbout);
 
@@ -263,6 +267,10 @@ bool AppController::start()
     connect(m_quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
     updateVisibilityAction();
 
+    // Named so a test can tell it from the import popup: a QMenu is a Qt::Popup and
+    // therefore a top-level widget even when it has a parent, so both show up in
+    // QApplication::topLevelWidgets().
+    m_menu->setObjectName(QStringLiteral("trayMenu"));
     m_trayIcon->setIcon(makeTrayIcon());
     m_trayIcon->setToolTip(QStringLiteral("Potato"));
     m_trayIcon->setContextMenu(m_menu.get());
@@ -278,6 +286,9 @@ bool AppController::start()
     updateIdleScheduler();
     setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
     m_environmentResolver->start();
+    // Seed the Environment page's read-only "now" row: environmentChanged only fires
+    // on a rollover, so nothing would fill it until the next one otherwise.
+    updateEnvironmentSummary();
     m_animationPlayer->setReducedMotion(m_motionController->reducedMotion());
     m_settingsWindow->setReducedMotion(m_motionController->reducedMotion());
     m_speechBubble->setAlwaysOnTop(m_settings->alwaysOnTop());
@@ -467,6 +478,29 @@ void AppController::updateResourceSummary()
         : QStringLiteral("v2 fallback");
     m_settingsWindow->setResourceSummary(
         PetResourceSummary::build(*m_currentPackage, builtInFallback));
+}
+
+// The one line users actually wanted from the fallback table: which season and
+// phase is in effect right now. Shown as a read-only row on the Environment page.
+void AppController::updateEnvironmentSummary()
+{
+    const VariantKey key = m_environmentResolver->current();
+    const bool zh = m_localization->usesChinese();
+    static const auto seasonName = [](Season season, bool chinese) {
+        switch (season) {
+        case Season::Spring: return chinese ? QStringLiteral("春季") : QStringLiteral("Spring");
+        case Season::Summer: return chinese ? QStringLiteral("夏季") : QStringLiteral("Summer");
+        case Season::Autumn: return chinese ? QStringLiteral("秋季") : QStringLiteral("Autumn");
+        case Season::Winter: return chinese ? QStringLiteral("冬季") : QStringLiteral("Winter");
+        }
+        return QString();
+    };
+    const QString phase = key.phase == TimePhase::Day
+        ? (zh ? QStringLiteral("白天") : QStringLiteral("Day"))
+        : (zh ? QStringLiteral("夜间") : QStringLiteral("Night"));
+    m_settingsWindow->setEnvironmentSummary(QStringLiteral("%1 · %2  (%3)")
+                                                .arg(seasonName(key.season, zh), phase,
+                                                     key.combinedName()));
 }
 
 void AppController::loadPreviewAtlas(const QString &relativePath)
@@ -766,7 +800,6 @@ void AppController::updateVisibilityAction()
                                                   : m_localization->text(TextKey::ShowPet));
     }
     if (m_settingsAction) m_settingsAction->setText(m_localization->text(TextKey::Settings));
-    if (m_welcomeAction) m_welcomeAction->setText(m_localization->text(TextKey::WelcomeMenuItem));
     if (m_aboutAction) m_aboutAction->setText(m_localization->text(TextKey::AboutMenuItem));
     if (m_quitAction) m_quitAction->setText(m_localization->text(TextKey::Quit));
     if (m_petMenu) m_petMenu->setTitle(m_localization->text(TextKey::Pet));

@@ -182,6 +182,8 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/login/MacLoginItemController.mm
     src/platform/MacApplication.h
     src/platform/MacApplication.mm
+    src/platform/SystemSymbols.h
+    src/platform/MacSystemSymbols.mm
     src/platform/MacWindowOverlay.mm
 )
 

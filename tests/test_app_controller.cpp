@@ -9,6 +9,7 @@
 #include "settings/AppSettings.h"
 #include "settings/SettingsWindow.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -16,6 +17,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMenu>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -191,6 +193,42 @@ private slots:
         AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
         QVERIFY(controller.start());
         QCOMPARE(settings.selectedPetId(), QStringLiteral("alpha"));
+    }
+
+    // A3: the tray menu is Show/Hide, the Pet submenu, Settings, About, Quit. The
+    // Welcome Guide used to hold a permanent slot for a first-run artefact and now
+    // lives under Settings > General > About.
+    void trayMenuIsTrimmedAndHasNoWelcomeItem()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+        Localization localization(&settings);
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+
+        // Found by objectName, not by type: a QMenu is a Qt::Popup and so counts as a
+        // top-level widget even with a parent, which means the settings window's
+        // import popup shows up in this list too.
+        QMenu *tray = nullptr;
+        for (QWidget *candidate : QApplication::topLevelWidgets()) {
+            if (candidate->objectName() == QStringLiteral("trayMenu")) {
+                tray = qobject_cast<QMenu *>(candidate);
+            }
+        }
+        QVERIFY(tray);
+
+        QStringList texts;
+        for (QAction *action : tray->actions()) {
+            if (!action->isSeparator()) texts << action->text();
+        }
+        QCOMPARE(texts, QStringList({localization.text(TextKey::HidePet),
+                                     localization.text(TextKey::Pet),
+                                     localization.text(TextKey::Settings),
+                                     localization.text(TextKey::AboutMenuItem),
+                                     localization.text(TextKey::Quit)}));
+        QVERIFY(!texts.contains(localization.text(TextKey::WelcomeMenuItem)));
     }
 
     void opacitySettingReachesThePetWindowAndKeepsItVisible()

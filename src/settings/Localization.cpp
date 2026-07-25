@@ -97,6 +97,23 @@ QString Localization::text(TextKey key) const
     case TextKey::AboutViewLicenses: return zh ? QStringLiteral("第三方许可…") : QStringLiteral("Third-party licenses…");
     case TextKey::PetAccessibleName: return zh ? QStringLiteral("Potato 桌面宠物") : QStringLiteral("Potato desktop pet");
     case TextKey::PetAccessibleDescription: return zh ? QStringLiteral("可拖动的桌面宠物，点击可与它互动。") : QStringLiteral("A draggable desktop pet. Click it to interact.");
+    case TextKey::Appearance: return zh ? QStringLiteral("外观") : QStringLiteral("Appearance");
+    case TextKey::Behavior: return zh ? QStringLiteral("行为") : QStringLiteral("Behavior");
+    case TextKey::Environment: return zh ? QStringLiteral("环境") : QStringLiteral("Environment");
+    case TextKey::SectionCurrentPet: return zh ? QStringLiteral("当前宠物") : QStringLiteral("Current pet");
+    case TextKey::SectionDisplay: return zh ? QStringLiteral("显示") : QStringLiteral("Display");
+    case TextKey::SectionWindowInteraction: return zh ? QStringLiteral("窗口交互") : QStringLiteral("Window interaction");
+    case TextKey::SectionActivity: return zh ? QStringLiteral("活动感知") : QStringLiteral("Activity");
+    case TextKey::SectionSeasonPhase: return zh ? QStringLiteral("季节与昼夜") : QStringLiteral("Season and time of day");
+    case TextKey::SectionStartup: return zh ? QStringLiteral("启动") : QStringLiteral("Startup");
+    case TextKey::SectionInterface: return zh ? QStringLiteral("界面") : QStringLiteral("Interface");
+    case TextKey::SectionAbout: return zh ? QStringLiteral("关于") : QStringLiteral("About");
+    case TextKey::Opacity: return zh ? QStringLiteral("不透明度") : QStringLiteral("Opacity");
+    case TextKey::LockPosition: return zh ? QStringLiteral("锁定宠物位置") : QStringLiteral("Lock pet position");
+    case TextKey::LockPositionNote: return zh ? QStringLiteral("锁定后无法拖动；点击互动与右键菜单仍然可用。") : QStringLiteral("Dragging is disabled. Clicking and the context menu still work.");
+    case TextKey::CurrentEnvironment: return zh ? QStringLiteral("当前") : QStringLiteral("Now");
+    case TextKey::ResourceDetails: return zh ? QStringLiteral("资源详情") : QStringLiteral("Resource details");
+    case TextKey::UseStandardAnimation: return zh ? QStringLiteral("使用标准动作") : QStringLiteral("Use standard animation");
     }
     return {};
 }

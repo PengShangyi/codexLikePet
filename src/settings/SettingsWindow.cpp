@@ -1,153 +1,414 @@
 #include "settings/SettingsWindow.h"
 
+#include "platform/SystemSymbols.h"
+#include "resources/PetLibrary.h"
 #include "settings/AppSettings.h"
 #include "settings/Localization.h"
+#include "pet/WindowPlacement.h"
 #include "settings/PetPreviewWidget.h"
-#include "resources/PetLibrary.h"
+#include "ui/Disclosure.h"
+#include "ui/InlineBanner.h"
+#include "ui/SettingsCard.h"
+#include "ui/SettingsPage.h"
+#include "ui/SettingsRow.h"
+#include "ui/Theme.h"
+#include "ui/ValueSlider.h"
 
-#include <QCheckBox>
 #include <QAction>
+#include <QButtonGroup>
+#include <QCoreApplication>
+#include <QCheckBox>
 #include <QComboBox>
-#include <QFormLayout>
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QMenu>
 #include <QPushButton>
 #include <QPlainTextEdit>
+#include <QGuiApplication>
+#include <QHideEvent>
+#include <QMoveEvent>
+#include <QResizeEvent>
+#include <QScreen>
+#include <QShowEvent>
 #include <QSignalBlocker>
-#include <QSlider>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QTimeEdit>
+#include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
+
+namespace {
+
+// Checkboxes carry no text of their own: the row label already names them, and
+// setting both would print the label twice. A bare right-aligned indicator is also
+// what System Settings shows.
+QCheckBox *makeRowCheck(QWidget *parent)
+{
+    auto *check = new QCheckBox(parent);
+    check->setText(QString());
+    // Rows give controls a minimum width so neighbouring combos line up; a lone
+    // checkbox indicator must not be stretched by it.
+    check->setMinimumWidth(1);
+    return check;
+}
+
+}  // namespace
 
 SettingsWindow::SettingsWindow(AppSettings *settings, Localization *localization, QWidget *parent)
     : QWidget(parent, Qt::Window)
     , m_settings(settings)
     , m_localization(localization)
+    , m_theme(new ThemeWatcher(this))
+    , m_geometrySaveTimer(new QTimer(this))
 {
     setAttribute(Qt::WA_QuitOnClose, false);
-    setMinimumSize(600, 650);
+    setMinimumSize(Theme::Metrics::windowMinWidth, Theme::Metrics::windowMinHeight);
+    m_geometrySaveTimer->setSingleShot(true);
+    m_geometrySaveTimer->setInterval(400);
+    connect(m_geometrySaveTimer, &QTimer::timeout, this, &SettingsWindow::saveGeometry);
     buildUi();
     bindSettings();
     retranslate();
+    restoreGeometry();
     connect(localization, &Localization::languageChanged, this, &SettingsWindow::retranslate);
+    connect(m_theme, &ThemeWatcher::schemeChanged, this, &SettingsWindow::applyTheme);
 }
 
 void SettingsWindow::buildUi()
 {
-    auto *root = new QVBoxLayout(this);
-    m_tabs = new QTabWidget(this);
-    root->addWidget(m_tabs);
+    setObjectName(QStringLiteral("settingsRoot"));
+    // Not a QFrame, so the stylesheet's background rule needs this to bite.
+    setAttribute(Qt::WA_StyledBackground, true);
 
-    m_petTab = new QWidget(m_tabs);
-    auto *petLayout = new QVBoxLayout(m_petTab);
-    m_petCombo = new QComboBox(m_petTab);
-    petLayout->addWidget(m_petCombo);
-    auto *petButtons = new QHBoxLayout;
-    m_importButton = new QPushButton(m_petTab);
+    auto *root = new QVBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
+
+    m_navBar = new QWidget(this);
+    m_navBar->setObjectName(QStringLiteral("navBar"));
+    m_navBar->setAttribute(Qt::WA_StyledBackground, true);
+    auto *navLayout = new QHBoxLayout(m_navBar);
+    navLayout->setContentsMargins(Theme::Metrics::navBarPaddingH,
+                                  Theme::Metrics::navBarPaddingV,
+                                  Theme::Metrics::navBarPaddingH,
+                                  Theme::Metrics::navBarPaddingV);
+    navLayout->setSpacing(Theme::Metrics::navItemSpacing);
+    navLayout->addStretch();
+    navLayout->addStretch();
+    root->addWidget(m_navBar);
+
+    m_navGroup = new QButtonGroup(this);
+    m_navGroup->setExclusive(true);
+
+    m_stack = new QStackedWidget(this);
+    root->addWidget(m_stack, 1);
+
+    buildPetPage();
+    buildAppearancePage();
+    buildBehaviorPage();
+    buildEnvironmentPage();
+    buildGeneralPage();
+
+    connect(m_navGroup, &QButtonGroup::idClicked, m_stack, &QStackedWidget::setCurrentIndex);
+    // Icons are tinted per selection state, so the pair that changed both need
+    // re-rendering after every switch.
+    connect(m_navGroup, &QButtonGroup::idClicked, this, [this] { updateNavIcons(); });
+    if (!m_navButtons.isEmpty()) {
+        m_navButtons.first()->setChecked(true);
+        m_stack->setCurrentIndex(0);
+    }
+}
+
+SettingsPage *SettingsWindow::addPage(TextKey title, const QString &symbolName)
+{
+    auto *page = new SettingsPage(m_stack);
+    const int index = m_stack->count();
+    m_stack->addWidget(page);
+
+    auto *button = new QToolButton(m_navBar);
+    button->setObjectName(QStringLiteral("navItem"));
+    button->setCheckable(true);
+    button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+    button->setIconSize(QSize(Theme::Metrics::navIconSize, Theme::Metrics::navIconSize));
+    button->setFont(Theme::navItemFont(font()));
+    button->setCursor(Qt::PointingHandCursor);
+    button->setFocusPolicy(Qt::StrongFocus);
+    m_navGroup->addButton(button, index);
+    m_navButtons.append(button);
+    m_navKeys.append(title);
+    m_navSymbols.append(symbolName);
+
+    // Insert between the two stretches so the row stays centred.
+    auto *navLayout = static_cast<QHBoxLayout *>(m_navBar->layout());
+    navLayout->insertWidget(navLayout->count() - 1, button);
+    return page;
+}
+
+void SettingsWindow::buildPetPage()
+{
+    SettingsPage *page = addPage(TextKey::Pet, QStringLiteral("pawprint.fill"));
+
+    auto *petCard = new SettingsCard(TextKey::SectionCurrentPet, m_localization, page);
+    petCard->setObjectName(QStringLiteral("petCard"));
+    m_petCombo = new QComboBox;
+    auto *petRow = new SettingsRow(TextKey::Pet, m_petCombo, m_localization);
+    petRow->setObjectName(QStringLiteral("petRow"));
+    petCard->addRow(petRow);
+    m_rows.append(petRow);
+
+    auto *buttonStrip = new QWidget(petCard);
+    auto *buttonLayout = new QHBoxLayout(buttonStrip);
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
+    m_importButton = new QPushButton(buttonStrip);
+    m_importButton->setObjectName(QStringLiteral("importButton"));
     auto *importMenu = new QMenu(m_importButton);
     QAction *packageAction = importMenu->addAction(QString());
     packageAction->setObjectName(QStringLiteral("importPackageAction"));
     QAction *directoryAction = importMenu->addAction(QString());
     directoryAction->setObjectName(QStringLiteral("importDirectoryAction"));
     m_importButton->setMenu(importMenu);
-    m_removeButton = new QPushButton(m_petTab);
+    m_removeButton = new QPushButton(buttonStrip);
+    m_removeButton->setObjectName(QStringLiteral("removeButton"));
     m_removeButton->setEnabled(false);
-    petButtons->addWidget(m_importButton);
-    petButtons->addWidget(m_removeButton);
-    petButtons->addStretch();
-    petLayout->addLayout(petButtons);
-    m_previewForm = new QFormLayout;
-    m_previewAtlasLabel = new QLabel(m_petTab);
-    m_previewStateLabel = new QLabel(m_petTab);
-    m_previewClipLabel = new QLabel(m_petTab);
-    m_previewAtlasCombo = new QComboBox(m_petTab);
-    m_previewStateCombo = new QComboBox(m_petTab);
-    m_previewClipCombo = new QComboBox(m_petTab);
-    m_previewForm->addRow(m_previewAtlasLabel, m_previewAtlasCombo);
-    m_previewForm->addRow(m_previewStateLabel, m_previewStateCombo);
-    m_previewForm->addRow(m_previewClipLabel, m_previewClipCombo);
-    petLayout->addLayout(m_previewForm);
-    m_preview = new PetPreviewWidget(m_petTab);
-    petLayout->addWidget(m_preview, 1);
-    m_resourceSummaryLabel = new QLabel(m_petTab);
-    petLayout->addWidget(m_resourceSummaryLabel);
-    m_resourceSummary = new QPlainTextEdit(m_petTab);
-    m_resourceSummary->setReadOnly(true);
-    m_resourceSummary->setMaximumHeight(105);
-    petLayout->addWidget(m_resourceSummary);
-    m_report = new QPlainTextEdit(m_petTab);
-    m_report->setReadOnly(true);
-    m_report->setMaximumBlockCount(200);
-    m_report->hide();
-    petLayout->addWidget(m_report);
-    m_tabs->addTab(m_petTab, QString());
+    buttonLayout->addWidget(m_importButton);
+    buttonLayout->addWidget(m_removeButton);
+    buttonLayout->addStretch();
+    petCard->addContent(buttonStrip);
+    page->addCard(petCard);
+    m_cards.append(petCard);
 
-    m_generalTab = new QWidget(m_tabs);
-    m_generalForm = new QFormLayout(m_generalTab);
-    m_scaleSlider = new QSlider(Qt::Horizontal, m_generalTab);
-    m_scaleSlider->setRange(50, 200);
-    m_speedSlider = new QSlider(Qt::Horizontal, m_generalTab);
-    m_speedSlider->setRange(50, 200);
-    m_topCheck = new QCheckBox(m_generalTab);
-    m_loginCheck = new QCheckBox(m_generalTab);
-    m_typingCheck = new QCheckBox(m_generalTab);
-    m_typingNote = new QLabel(m_generalTab);
-    m_typingNote->setWordWrap(true);
-    m_motionCombo = new QComboBox(m_generalTab);
-    m_hemisphereCombo = new QComboBox(m_generalTab);
-    m_dayStart = new QTimeEdit(m_generalTab);
-    m_nightStart = new QTimeEdit(m_generalTab);
+    m_validationBanner = new InlineBanner(page);
+    m_validationBanner->setObjectName(QStringLiteral("validationBanner"));
+    page->addContent(m_validationBanner);
+
+    m_preview = new PetPreviewWidget(page);
+    page->addStretchingContent(m_preview);
+
+    // The atlas/animation/clip pickers and the season-by-phase fallback table are
+    // pet-authoring tools. They used to be most of what this page showed every user,
+    // so they live behind a collapsed disclosure now.
+    m_resourceDetails = new Disclosure(TextKey::ResourceDetails, m_localization, page);
+    m_resourceDetails->setObjectName(QStringLiteral("resourceDetails"));
+
+    m_previewAtlasCombo = new QComboBox;
+    m_previewStateCombo = new QComboBox;
+    m_previewClipCombo = new QComboBox;
+    auto *atlasRow = new SettingsRow(TextKey::PreviewVariant, m_previewAtlasCombo, m_localization);
+    auto *stateRow = new SettingsRow(TextKey::PreviewAnimation, m_previewStateCombo, m_localization);
+    auto *clipRow = new SettingsRow(TextKey::PreviewClip, m_previewClipCombo, m_localization);
+    for (SettingsRow *row : {atlasRow, stateRow, clipRow}) {
+        m_resourceDetails->contentLayout()->addWidget(row);
+        m_rows.append(row);
+    }
+
+    m_resourceSummary = new QPlainTextEdit;
+    m_resourceSummary->setObjectName(QStringLiteral("resourceSummary"));
+    m_resourceSummary->setReadOnly(true);
+    m_resourceSummary->setFrameShape(QFrame::NoFrame);
+    m_resourceSummary->setMaximumHeight(105);
+    m_resourceDetails->contentLayout()->addWidget(m_resourceSummary);
+
+    page->addContent(m_resourceDetails);
+}
+
+void SettingsWindow::buildAppearancePage()
+{
+    SettingsPage *page = addPage(TextKey::Appearance, QStringLiteral("slider.horizontal.3"));
+
+    auto *display = new SettingsCard(TextKey::SectionDisplay, m_localization, page);
+    display->setObjectName(QStringLiteral("displayCard"));
+
+    m_scaleSlider = new ValueSlider(50, 200, [](int value) {
+        return QStringLiteral("%1%").arg(value);
+    });
+    m_speedSlider = new ValueSlider(50, 200, [](int value) {
+        return QStringLiteral("%1×").arg(value / 100.0, 0, 'f', 2);
+    });
+    // Floor of 30%, matching AppSettings: a fully transparent pet cannot be clicked
+    // or found again.
+    m_opacitySlider = new ValueSlider(30, 100, [](int value) {
+        return QStringLiteral("%1%").arg(value);
+    });
+    m_topCheck = makeRowCheck(nullptr);
+    m_motionCombo = new QComboBox;
+
+    struct RowSpec {
+        TextKey key;
+        QWidget *control;
+        const char *name;
+    };
+    const RowSpec specs[] = {
+        {TextKey::Size, m_scaleSlider, "sizeRow"},
+        {TextKey::AnimationSpeed, m_speedSlider, "speedRow"},
+        {TextKey::Opacity, m_opacitySlider, "opacityRow"},
+        {TextKey::AlwaysOnTop, m_topCheck, "alwaysOnTopRow"},
+        {TextKey::ReducedMotion, m_motionCombo, "motionRow"},
+    };
+    for (const RowSpec &spec : specs) {
+        auto *row = new SettingsRow(spec.key, spec.control, m_localization);
+        row->setObjectName(QLatin1String(spec.name));
+        display->addRow(row);
+        m_rows.append(row);
+    }
+    page->addCard(display);
+    m_cards.append(display);
+}
+
+void SettingsWindow::buildBehaviorPage()
+{
+    SettingsPage *page = addPage(TextKey::Behavior, QStringLiteral("hand.tap.fill"));
+
+    auto *interaction = new SettingsCard(TextKey::SectionWindowInteraction, m_localization, page);
+    interaction->setObjectName(QStringLiteral("interactionCard"));
+    m_lockCheck = makeRowCheck(nullptr);
+    auto *lockRow = new SettingsRow(TextKey::LockPosition, m_lockCheck, m_localization);
+    lockRow->setObjectName(QStringLiteral("lockPositionRow"));
+    // Says outright that this is not click-through, which the project contract rules
+    // out and which is the obvious thing to assume a position lock means.
+    lockRow->setDescriptionKey(TextKey::LockPositionNote);
+    interaction->addRow(lockRow);
+    m_rows.append(lockRow);
+
+    auto *resetStrip = new QWidget(interaction);
+    auto *resetLayout = new QHBoxLayout(resetStrip);
+    resetLayout->setContentsMargins(0, 0, 0, 0);
+    m_resetButton = new QPushButton(resetStrip);
+    m_resetButton->setObjectName(QStringLiteral("resetPositionButton"));
+    resetLayout->addWidget(m_resetButton);
+    resetLayout->addStretch();
+    interaction->addContent(resetStrip);
+    page->addCard(interaction);
+    m_cards.append(interaction);
+
+    auto *activity = new SettingsCard(TextKey::SectionActivity, m_localization, page);
+    activity->setObjectName(QStringLiteral("activityCard"));
+    m_typingCheck = makeRowCheck(nullptr);
+    auto *typingRow = new SettingsRow(TextKey::TypingDetection, m_typingCheck, m_localization);
+    typingRow->setObjectName(QStringLiteral("typingRow"));
+    typingRow->setDescriptionKey(TextKey::TypingPrivacyNote);
+    activity->addRow(typingRow);
+    m_rows.append(typingRow);
+    page->addCard(activity);
+    m_cards.append(activity);
+}
+
+void SettingsWindow::buildEnvironmentPage()
+{
+    SettingsPage *page = addPage(TextKey::Environment, QStringLiteral("sun.max.fill"));
+
+    auto *card = new SettingsCard(TextKey::SectionSeasonPhase, m_localization, page);
+    card->setObjectName(QStringLiteral("seasonCard"));
+
+    m_environmentRow = new SettingsRow(TextKey::CurrentEnvironment, nullptr, m_localization);
+    m_environmentRow->setObjectName(QStringLiteral("currentEnvironmentRow"));
+    card->addRow(m_environmentRow);
+    m_rows.append(m_environmentRow);
+
+    m_hemisphereCombo = new QComboBox;
+    m_dayStart = new QTimeEdit;
+    m_nightStart = new QTimeEdit;
     m_dayStart->setDisplayFormat(QStringLiteral("HH:mm"));
     m_nightStart->setDisplayFormat(QStringLiteral("HH:mm"));
-    m_languageCombo = new QComboBox(m_generalTab);
-    m_resetButton = new QPushButton(m_generalTab);
-    m_aboutButton = new QPushButton(m_generalTab);
-    m_generalForm->addRow(QStringLiteral(" "), m_scaleSlider);
-    m_generalForm->addRow(QStringLiteral(" "), m_speedSlider);
-    m_generalForm->addRow(m_topCheck);
-    m_generalForm->addRow(m_loginCheck);
-    m_generalForm->addRow(m_typingCheck);
-    m_generalForm->addRow(QStringLiteral(" "), m_typingNote);
-    m_generalForm->addRow(QStringLiteral(" "), m_motionCombo);
-    m_generalForm->addRow(QStringLiteral(" "), m_hemisphereCombo);
-    m_generalForm->addRow(QStringLiteral(" "), m_dayStart);
-    m_generalForm->addRow(QStringLiteral(" "), m_nightStart);
-    m_generalForm->addRow(QStringLiteral(" "), m_languageCombo);
-    m_generalForm->addRow(m_resetButton);
-    m_generalForm->addRow(m_aboutButton);
-    m_tabs->addTab(m_generalTab, QString());
 
-    m_closeButton = new QPushButton(this);
-    root->addWidget(m_closeButton, 0, Qt::AlignRight);
+    struct RowSpec {
+        TextKey key;
+        QWidget *control;
+        const char *name;
+    };
+    const RowSpec specs[] = {
+        {TextKey::Hemisphere, m_hemisphereCombo, "hemisphereRow"},
+        {TextKey::DayStarts, m_dayStart, "dayStartRow"},
+        {TextKey::NightStarts, m_nightStart, "nightStartRow"},
+    };
+    for (const RowSpec &spec : specs) {
+        auto *row = new SettingsRow(spec.key, spec.control, m_localization);
+        row->setObjectName(QLatin1String(spec.name));
+        card->addRow(row);
+        m_rows.append(row);
+    }
+    page->addCard(card);
+    m_cards.append(card);
+}
+
+void SettingsWindow::buildGeneralPage()
+{
+    SettingsPage *page = addPage(TextKey::General, QStringLiteral("gearshape.fill"));
+
+    auto *startup = new SettingsCard(TextKey::SectionStartup, m_localization, page);
+    startup->setObjectName(QStringLiteral("startupCard"));
+    m_loginCheck = makeRowCheck(nullptr);
+    auto *loginRow = new SettingsRow(TextKey::LaunchAtLogin, m_loginCheck, m_localization);
+    loginRow->setObjectName(QStringLiteral("launchAtLoginRow"));
+    startup->addRow(loginRow);
+    m_rows.append(loginRow);
+    page->addCard(startup);
+    m_cards.append(startup);
+
+    auto *interfaceCard = new SettingsCard(TextKey::SectionInterface, m_localization, page);
+    interfaceCard->setObjectName(QStringLiteral("interfaceCard"));
+    m_languageCombo = new QComboBox;
+    auto *languageRow = new SettingsRow(TextKey::Language, m_languageCombo, m_localization);
+    languageRow->setObjectName(QStringLiteral("languageRow"));
+    interfaceCard->addRow(languageRow);
+    m_rows.append(languageRow);
+    page->addCard(interfaceCard);
+    m_cards.append(interfaceCard);
+
+    auto *about = new SettingsCard(TextKey::SectionAbout, m_localization, page);
+    about->setObjectName(QStringLiteral("aboutCard"));
+    auto *versionRow = new SettingsRow(TextKey::AboutVersionLabel, nullptr, m_localization);
+    versionRow->setObjectName(QStringLiteral("versionRow"));
+    // Same source AboutWindow uses; main.cpp seeds it from POTATO_VERSION before
+    // AppController builds this window.
+    versionRow->setValueText(QCoreApplication::applicationVersion());
+    about->addRow(versionRow);
+    m_rows.append(versionRow);
+
+    // The welcome guide lives here rather than in the tray menu: it is a first-run
+    // artefact, and a permanent menu slot for it was one item too many.
+    auto *welcomeStrip = new QWidget(about);
+    auto *welcomeLayout = new QHBoxLayout(welcomeStrip);
+    welcomeLayout->setContentsMargins(0, 0, 0, 0);
+    m_welcomeButton = new QPushButton(welcomeStrip);
+    m_welcomeButton->setObjectName(QStringLiteral("welcomeButton"));
+    welcomeLayout->addWidget(m_welcomeButton);
+    welcomeLayout->addStretch();
+    about->addContent(welcomeStrip);
+    page->addCard(about);
+    m_cards.append(about);
 }
 
 void SettingsWindow::bindSettings()
 {
     m_scaleSlider->setValue(qRound(m_settings->scale() * 100));
     m_speedSlider->setValue(qRound(m_settings->animationSpeed() * 100));
+    m_opacitySlider->setValue(qRound(m_settings->opacity() * 100));
     m_topCheck->setChecked(m_settings->alwaysOnTop());
+    m_lockCheck->setChecked(m_settings->positionLocked());
     m_loginCheck->setChecked(m_settings->launchAtLogin());
     m_typingCheck->setChecked(m_settings->typingDetectionEnabled());
-    m_motionCombo->setCurrentIndex(static_cast<int>(m_settings->motionPreference()));
-    m_hemisphereCombo->setCurrentIndex(static_cast<int>(m_settings->hemisphere()));
     m_dayStart->setTime(m_settings->dayStartsAt());
     m_nightStart->setTime(m_settings->nightStartsAt());
-    m_languageCombo->setCurrentIndex(static_cast<int>(m_settings->language()));
+    // The motion, hemisphere, and language combos are seeded in retranslate(), which
+    // is where their items are created; setting an index here would be a no-op on an
+    // empty combo.
 
-    connect(m_scaleSlider, &QSlider::valueChanged, this, [this](int value) {
+    connect(m_scaleSlider, &ValueSlider::valueChanged, this, [this](int value) {
         m_settings->setScale(value / 100.0);
-        updateSliderLabels();
     });
-    connect(m_speedSlider, &QSlider::valueChanged, this, [this](int value) {
+    connect(m_speedSlider, &ValueSlider::valueChanged, this, [this](int value) {
         m_settings->setAnimationSpeed(value / 100.0);
-        updateSliderLabels();
+    });
+    connect(m_opacitySlider, &ValueSlider::valueChanged, this, [this](int value) {
+        m_settings->setOpacity(value / 100.0);
     });
     connect(m_topCheck, &QCheckBox::toggled, m_settings, &AppSettings::setAlwaysOnTop);
+    connect(m_lockCheck, &QCheckBox::toggled, m_settings, &AppSettings::setPositionLocked);
     connect(m_loginCheck, &QCheckBox::toggled, m_settings, &AppSettings::setLaunchAtLogin);
     connect(m_typingCheck, &QCheckBox::toggled, m_settings, &AppSettings::setTypingDetectionEnabled);
+    // Two-way: a failed login-item registration or a denied Input Monitoring prompt
+    // reverts the setting, and the box has to follow it back.
     connect(m_settings, &AppSettings::launchAtLoginChanged, m_loginCheck, &QCheckBox::setChecked);
     connect(m_settings, &AppSettings::typingDetectionEnabledChanged, m_typingCheck, &QCheckBox::setChecked);
     connect(m_motionCombo, &QComboBox::currentIndexChanged, this, [this](int value) { m_settings->setMotionPreference(static_cast<MotionPreference>(value)); });
@@ -156,7 +417,7 @@ void SettingsWindow::bindSettings()
     connect(m_nightStart, &QTimeEdit::timeChanged, m_settings, &AppSettings::setNightStartsAt);
     connect(m_languageCombo, &QComboBox::currentIndexChanged, this, [this](int value) { m_settings->setLanguage(static_cast<AppLanguage>(value)); });
     connect(m_resetButton, &QPushButton::clicked, this, &SettingsWindow::resetPositionRequested);
-    connect(m_aboutButton, &QPushButton::clicked, this, &SettingsWindow::aboutRequested);
+    connect(m_welcomeButton, &QPushButton::clicked, this, &SettingsWindow::welcomeRequested);
     connect(m_importButton->menu()->findChild<QAction *>(QStringLiteral("importPackageAction")),
             &QAction::triggered,
             this,
@@ -193,38 +454,113 @@ void SettingsWindow::bindSettings()
         }
         emit previewClipSelected(m_previewClipCombo->itemData(index).toString());
     });
-    connect(m_closeButton, &QPushButton::clicked, this, &QWidget::hide);
 }
 
-void SettingsWindow::retranslate()
+void SettingsWindow::showEvent(QShowEvent *event)
 {
-    setWindowTitle(QStringLiteral("Potato — %1").arg(m_localization->text(TextKey::Settings).remove(QChar(0x2026))));
-    m_tabs->setTabText(m_tabs->indexOf(m_petTab), m_localization->text(TextKey::Pet));
-    m_tabs->setTabText(m_tabs->indexOf(m_generalTab), m_localization->text(TextKey::General));
-    if (m_petCombo->count() == 0) {
-        m_petCombo->addItem(m_localization->text(TextKey::NoPetSelected), QString());
-    } else if (m_petCombo->count() == 1 && m_petCombo->itemData(0).toString().isEmpty()) {
-        m_petCombo->setItemText(0, m_localization->text(TextKey::NoPetSelected));
+    QWidget::showEvent(event);
+    if (!m_themeApplied) applyTheme();
+    // The saved rect may predate a display change, so re-fit on every show rather
+    // than trusting what was restored at construction.
+    const QRect available = availableGeometry();
+    const QRect fitted = WindowPlacement::fitToAvailableGeometry(geometry(), available);
+    if (fitted != geometry()) {
+        m_restoringGeometry = true;
+        setGeometry(fitted);
+        m_restoringGeometry = false;
     }
-    m_importButton->setText(m_localization->text(TextKey::ImportPet));
-    m_removeButton->setText(m_localization->text(TextKey::RemovePet));
-    if (QAction *action = m_importButton->menu()->findChild<QAction *>(QStringLiteral("importPackageAction"))) action->setText(m_localization->text(TextKey::ImportPackage));
-    if (QAction *action = m_importButton->menu()->findChild<QAction *>(QStringLiteral("importDirectoryAction"))) action->setText(m_localization->text(TextKey::ImportDirectory));
-    m_report->setPlaceholderText(m_localization->text(TextKey::ValidationReport));
-    m_previewAtlasLabel->setText(m_localization->text(TextKey::PreviewVariant));
-    m_previewStateLabel->setText(m_localization->text(TextKey::PreviewAnimation));
-    m_previewClipLabel->setText(m_localization->text(TextKey::PreviewClip));
-    if (m_previewClipCombo->count() > 0) {
-        m_previewClipCombo->setItemText(0,
-                                        m_localization->usesChinese()
-                                            ? QStringLiteral("使用标准动作")
-                                            : QStringLiteral("Use standard animation"));
-    }
-    m_previewAtlasCombo->setToolTip(m_localization->text(TextKey::PreviewVariant));
-    m_previewStateCombo->setToolTip(m_localization->text(TextKey::PreviewAnimation));
-    m_resourceSummary->setPlaceholderText(m_localization->text(TextKey::ResourceFallbacks));
-    m_resourceSummaryLabel->setText(m_localization->text(TextKey::ResourceFallbacks));
+}
 
+void SettingsWindow::hideEvent(QHideEvent *event)
+{
+    // Flush immediately: the window may not be shown again this session, and the
+    // pending coalesced write would be lost.
+    if (m_geometrySaveTimer->isActive()) {
+        m_geometrySaveTimer->stop();
+        saveGeometry();
+    }
+    QWidget::hideEvent(event);
+}
+
+void SettingsWindow::moveEvent(QMoveEvent *event)
+{
+    QWidget::moveEvent(event);
+    scheduleGeometrySave();
+}
+
+void SettingsWindow::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    scheduleGeometrySave();
+}
+
+QRect SettingsWindow::availableGeometry() const
+{
+    const QScreen *screen = QGuiApplication::primaryScreen();
+    return screen ? screen->availableGeometry() : QRect(0, 0, 1440, 900);
+}
+
+void SettingsWindow::restoreGeometry()
+{
+    const QRect available = availableGeometry();
+    const QSize initial = size().expandedTo(minimumSize());
+    QRect target(WindowPlacement::centeredPosition(initial, available), initial);
+    if (m_settings->hasSettingsGeometry()) {
+        const QRect saved = m_settings->settingsGeometry();
+        // Discard a rect saved on a display that is gone; keep and clamp one that
+        // merely hangs off an edge.
+        if (WindowPlacement::isUsableSavedGeometry(saved, available)) {
+            target = WindowPlacement::fitToAvailableGeometry(saved, available);
+        }
+    }
+    m_restoringGeometry = true;
+    setGeometry(target);
+    m_restoringGeometry = false;
+}
+
+void SettingsWindow::scheduleGeometrySave()
+{
+    // Restoring must not immediately re-save what it just read, or a discarded
+    // off-screen rect would be overwritten by its clamped form before the user ever
+    // moved the window.
+    if (m_restoringGeometry) return;
+    m_geometrySaveTimer->start();
+}
+
+void SettingsWindow::saveGeometry()
+{
+    m_settings->setSettingsGeometry(geometry());
+}
+
+void SettingsWindow::applyTheme()
+{
+    m_themeApplied = true;
+    // Scoped to this window's subtree, never qApp: the pet window and the speech
+    // bubble are custom-painted and must stay untouched.
+    setStyleSheet(Theme::styleSheet(m_theme->scheme()));
+    m_preview->setColorScheme(m_theme->scheme());
+    updateNavIcons();
+}
+
+void SettingsWindow::updateNavIcons()
+{
+    const Theme::Palette palette = Theme::palette(m_theme->scheme());
+    for (int index = 0; index < m_navButtons.size(); ++index) {
+        QToolButton *button = m_navButtons.at(index);
+        const bool selected = button->isChecked();
+        // SF Symbols come back as fixed bitmaps, so they are re-tinted per scheme
+        // and per selection state rather than relying on NSImage template behavior.
+        const QIcon icon = SystemSymbols::icon(m_navSymbols.at(index),
+                                               Theme::Metrics::navIconSize,
+                                               selected ? palette.accentText : palette.textSecondary);
+        // A null icon is expected on any platform that cannot supply the symbol; the
+        // button then renders text-only, which still reads correctly.
+        button->setIcon(icon);
+    }
+}
+
+void SettingsWindow::rebuildPreviewStateItems()
+{
     const QSignalBlocker stateBlocker(m_previewStateCombo);
     const int previousState = m_previewStateCombo->currentData().toInt();
     m_previewStateCombo->clear();
@@ -246,50 +582,73 @@ void SettingsWindow::retranslate()
         if (static_cast<int>(state) == previousState) selectedStateIndex = m_previewStateCombo->count() - 1;
     }
     m_previewStateCombo->setCurrentIndex(selectedStateIndex);
-    updateSliderLabels();
-    m_topCheck->setText(m_localization->text(TextKey::AlwaysOnTop));
-    m_loginCheck->setText(m_localization->text(TextKey::LaunchAtLogin));
-    m_typingCheck->setText(m_localization->text(TextKey::TypingDetection));
-    m_typingNote->setText(m_localization->text(TextKey::TypingPrivacyNote));
+}
 
+void SettingsWindow::retranslate()
+{
+    setWindowTitle(QStringLiteral("Potato — %1")
+                       .arg(m_localization->text(TextKey::Settings).remove(QChar(0x2026))));
+
+    for (int index = 0; index < m_navButtons.size(); ++index) {
+        const QString title = m_localization->text(m_navKeys.at(index));
+        m_navButtons.at(index)->setText(title);
+        m_navButtons.at(index)->setAccessibleName(title);
+    }
+
+    for (SettingsCard *card : m_cards) card->retranslate();
+    // Rows inside disclosures are not owned by a card, so walk every row too. The
+    // duplicate retranslate() on card-owned rows is idempotent.
+    for (SettingsRow *row : m_rows) row->retranslate();
+    m_resourceDetails->retranslate();
+
+    if (m_petCombo->count() == 0) {
+        m_petCombo->addItem(m_localization->text(TextKey::NoPetSelected), QString());
+    } else if (m_petCombo->count() == 1 && m_petCombo->itemData(0).toString().isEmpty()) {
+        m_petCombo->setItemText(0, m_localization->text(TextKey::NoPetSelected));
+    }
+    m_importButton->setText(m_localization->text(TextKey::ImportPet));
+    m_removeButton->setText(m_localization->text(TextKey::RemovePet));
+    if (QAction *action = m_importButton->menu()->findChild<QAction *>(QStringLiteral("importPackageAction"))) action->setText(m_localization->text(TextKey::ImportPackage));
+    if (QAction *action = m_importButton->menu()->findChild<QAction *>(QStringLiteral("importDirectoryAction"))) action->setText(m_localization->text(TextKey::ImportDirectory));
+    m_resourceSummary->setPlaceholderText(m_localization->text(TextKey::ResourceFallbacks));
+    if (m_previewClipCombo->count() > 0) {
+        m_previewClipCombo->setItemText(0, m_localization->text(TextKey::UseStandardAnimation));
+    }
+    m_resetButton->setText(m_localization->text(TextKey::ResetPosition));
+    m_welcomeButton->setText(m_localization->text(TextKey::WelcomeMenuItem));
+
+    rebuildPreviewStateItems();
+
+    // These three combos are rebuilt rather than relabelled, so repopulating them
+    // has to happen under a signal blocker: otherwise clear() emits
+    // currentIndexChanged(-1) and the handler writes that back as the user's choice.
+    //
+    // The selection is restored from AppSettings rather than from the combo's own
+    // index. Reading the index back looks equivalent but is not: retranslate() also
+    // runs once from the constructor, where the items do not exist yet, so the index
+    // is still -1 and every one of these would settle on its first entry. That is
+    // why reopening Settings used to show "Follow system", "Northern", and "System
+    // default" no matter what had been chosen.
     const QSignalBlocker motionBlocker(m_motionCombo);
     const QSignalBlocker hemisphereBlocker(m_hemisphereCombo);
     const QSignalBlocker languageBlocker(m_languageCombo);
-    const int motion = m_motionCombo->currentIndex();
     m_motionCombo->clear();
     m_motionCombo->addItems({m_localization->text(TextKey::FollowSystem), m_localization->text(TextKey::ReduceMotion), m_localization->text(TextKey::FullMotion)});
-    m_motionCombo->setCurrentIndex(motion < 0 ? 0 : motion);
-    const int hemisphere = m_hemisphereCombo->currentIndex();
+    m_motionCombo->setCurrentIndex(static_cast<int>(m_settings->motionPreference()));
     m_hemisphereCombo->clear();
     m_hemisphereCombo->addItems({m_localization->text(TextKey::North), m_localization->text(TextKey::South)});
-    m_hemisphereCombo->setCurrentIndex(hemisphere < 0 ? 0 : hemisphere);
-    const int language = m_languageCombo->currentIndex();
+    m_hemisphereCombo->setCurrentIndex(static_cast<int>(m_settings->hemisphere()));
     m_languageCombo->clear();
     m_languageCombo->addItems({m_localization->text(TextKey::SystemLanguage), m_localization->text(TextKey::English), m_localization->text(TextKey::SimplifiedChinese)});
-    m_languageCombo->setCurrentIndex(language < 0 ? 0 : language);
+    m_languageCombo->setCurrentIndex(static_cast<int>(m_settings->language()));
 
-    static_cast<QLabel *>(m_generalForm->labelForField(m_motionCombo))->setText(m_localization->text(TextKey::ReducedMotion));
-    static_cast<QLabel *>(m_generalForm->labelForField(m_hemisphereCombo))->setText(m_localization->text(TextKey::Hemisphere));
-    static_cast<QLabel *>(m_generalForm->labelForField(m_dayStart))->setText(m_localization->text(TextKey::DayStarts));
-    static_cast<QLabel *>(m_generalForm->labelForField(m_nightStart))->setText(m_localization->text(TextKey::NightStarts));
-    static_cast<QLabel *>(m_generalForm->labelForField(m_languageCombo))->setText(m_localization->text(TextKey::Language));
-    m_resetButton->setText(m_localization->text(TextKey::ResetPosition));
-    m_aboutButton->setText(m_localization->text(TextKey::AboutMenuItem));
-    m_closeButton->setText(m_localization->text(TextKey::Close));
-
-    // Accessible names for VoiceOver: sliders and combos sit next to blank form
-    // labels, so their visible context isn't otherwise exposed to assistive tech.
-    m_petCombo->setAccessibleName(m_localization->text(TextKey::Pet));
+    // The five controls that are not row-owned still need naming by hand; every
+    // other control gets its accessible name from its SettingsRow.
     m_importButton->setAccessibleName(m_localization->text(TextKey::ImportPet));
     m_removeButton->setAccessibleName(m_localization->text(TextKey::RemovePet));
-    m_scaleSlider->setAccessibleName(m_localization->text(TextKey::Size));
-    m_speedSlider->setAccessibleName(m_localization->text(TextKey::AnimationSpeed));
-    m_typingCheck->setAccessibleDescription(m_localization->text(TextKey::TypingPrivacyNote));
-    m_motionCombo->setAccessibleName(m_localization->text(TextKey::ReducedMotion));
-    m_hemisphereCombo->setAccessibleName(m_localization->text(TextKey::Hemisphere));
-    m_dayStart->setAccessibleName(m_localization->text(TextKey::DayStarts));
-    m_nightStart->setAccessibleName(m_localization->text(TextKey::NightStarts));
-    m_languageCombo->setAccessibleName(m_localization->text(TextKey::Language));
+    m_resetButton->setAccessibleName(m_localization->text(TextKey::ResetPosition));
+    m_welcomeButton->setAccessibleName(m_localization->text(TextKey::WelcomeMenuItem));
+    m_resourceSummary->setAccessibleName(m_localization->text(TextKey::ResourceFallbacks));
 }
 
 void SettingsWindow::setPets(const QVector<PetRecord> &pets, const QString &selectedId)
@@ -345,10 +704,7 @@ void SettingsWindow::setPreviewClipOptions(const QStringList &labels, const QStr
 {
     const QSignalBlocker blocker(m_previewClipCombo);
     m_previewClipCombo->clear();
-    m_previewClipCombo->addItem(m_localization->usesChinese()
-                                    ? QStringLiteral("使用标准动作")
-                                    : QStringLiteral("Use standard animation"),
-                                QString());
+    m_previewClipCombo->addItem(m_localization->text(TextKey::UseStandardAnimation), QString());
     const int count = std::min(labels.size(), keys.size());
     for (int index = 0; index < count; ++index) {
         m_previewClipCombo->addItem(labels.at(index), keys.at(index));
@@ -374,9 +730,9 @@ QString SettingsWindow::resourceSummary() const
 
 void SettingsWindow::setValidationReport(const QString &report, bool error)
 {
-    m_report->setVisible(!report.isEmpty());
-    m_report->setPlainText(report);
-    m_report->setStyleSheet(error ? QStringLiteral("QPlainTextEdit { color: #a02020; }") : QString());
+    m_validationBanner->setMessage(report,
+                                   error ? InlineBanner::Severity::Error
+                                         : InlineBanner::Severity::Info);
 }
 
 void SettingsWindow::setReducedMotion(bool reduced)
@@ -384,14 +740,7 @@ void SettingsWindow::setReducedMotion(bool reduced)
     m_preview->setReducedMotion(reduced);
 }
 
-void SettingsWindow::updateSliderLabels()
+void SettingsWindow::setEnvironmentSummary(const QString &summary)
 {
-    static_cast<QLabel *>(m_generalForm->labelForField(m_scaleSlider))
-        ->setText(QStringLiteral("%1 — %2%")
-                      .arg(m_localization->text(TextKey::Size))
-                      .arg(m_scaleSlider->value()));
-    static_cast<QLabel *>(m_generalForm->labelForField(m_speedSlider))
-        ->setText(QStringLiteral("%1 — %2×")
-                      .arg(m_localization->text(TextKey::AnimationSpeed))
-                      .arg(m_speedSlider->value() / 100.0, 0, 'f', 2));
+    m_environmentRow->setValueText(summary);
 }

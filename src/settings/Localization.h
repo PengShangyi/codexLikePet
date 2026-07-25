@@ -25,6 +25,14 @@ enum class TextKey {
     AboutMenuItem, WelcomeMenuItem, AboutTagline, AboutCopyright,
     AboutVersionLabel, AboutViewLicenses,
     PetAccessibleName, PetAccessibleDescription,
+    // Settings navigation pages. Pet and General reuse the keys above.
+    Appearance, Behavior, Environment,
+    // Card titles.
+    SectionCurrentPet, SectionDisplay, SectionWindowInteraction, SectionActivity,
+    SectionSeasonPhase, SectionStartup, SectionInterface, SectionAbout,
+    // Rows.
+    Opacity, LockPosition, LockPositionNote, CurrentEnvironment, ResourceDetails,
+    UseStandardAnimation,
 };
 
 class Localization final : public QObject
