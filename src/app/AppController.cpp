@@ -567,6 +567,23 @@ void AppController::applyBehaviorState(BehaviorState state)
         m_animationPlayer->setState(V2AnimationState::RunningRight, false);
         m_animationPlayer->start();
         break;
+    // TEMP: left/right edge interaction animations disabled per request.
+    // The pet still snaps to the side edges but renders the plain idle loop
+    // instead of the edge-left/edge-right clips. Restore the block below to
+    // re-enable them.
+    case BehaviorState::EdgeLeft:
+    case BehaviorState::EdgeRight:
+        m_animationPlayer->setState(V2AnimationState::Idle);
+        m_animationPlayer->start();
+        break;
+    case BehaviorState::EdgeBottom: {
+        if (playClip(QStringLiteral("edge-bottom"), false)) break;
+        m_animationPlayer->stop();
+        m_petWindow->setFrame(m_currentAtlas->lookFrame(0));
+        break;
+    }
+    /* Original combined edge handling — restore to re-enable left/right edge
+       interaction animations:
     case BehaviorState::EdgeLeft:
     case BehaviorState::EdgeRight:
     case BehaviorState::EdgeBottom: {
@@ -581,6 +598,7 @@ void AppController::applyBehaviorState(BehaviorState state)
         m_petWindow->setFrame(m_currentAtlas->lookFrame(lookIndex));
         break;
     }
+    */
     }
 }
 
