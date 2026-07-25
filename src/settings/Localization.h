@@ -15,6 +15,7 @@ enum class TextKey {
     InputPermissionTitle, InputPermissionBody, OpenSystemSettings,
     LoginItemErrorTitle,
     PreviewVariant, PreviewAnimation, PreviewClip, ResourceFallbacks,
+    PetLoadErrorTitle, StartupFailedTitle, StartupFailedBody,
     OnboardingTitle, OnboardingIntro,
     OnboardingMenuBarHeading, OnboardingMenuBarBody,
     OnboardingSettingsHeading, OnboardingSettingsBody,

@@ -3,7 +3,9 @@
 #include <QObject>
 #include <QHash>
 #include <QSharedPointer>
+#include <QString>
 #include <QUuid>
+#include <functional>
 #include <optional>
 
 #include "pet/BehaviorController.h"
@@ -27,6 +29,7 @@ class AnimationPlayer;
 class AnimationClip;
 class PetAtlas;
 class BehaviorController;
+class AppNotifier;
 class QuoteProvider;
 class SpeechBubble;
 class InputActivitySource;
@@ -48,13 +51,34 @@ class AppController final : public QObject
     Q_OBJECT
 
 public:
+    // Injectable platform boundaries + storage roots. Every field is optional:
+    // an unset pointer/callback falls back to the real macOS implementation, so
+    // production code constructs AppController(mode) unchanged while tests pass
+    // fakes to exercise the wiring headlessly. Injected objects are owned by the
+    // caller (never parented to this); defaults are owned by AppController.
+    struct Dependencies {
+        AppSettings *settings = nullptr;
+        InputActivitySource *input = nullptr;
+        SystemActivitySource *systemActivity = nullptr;
+        EnvironmentClock *clock = nullptr;
+        LoginItemController *loginItem = nullptr;
+        QuoteProvider *quoteProvider = nullptr;
+        AppNotifier *notifier = nullptr;
+        QString builtInPetRoot;
+        QString userPetRoot;
+        std::function<bool()> systemTrayAvailable;
+        IdleFidgetPolicy idlePolicy;
+    };
+
     explicit AppController(AppRunMode mode = AppRunMode::Normal, QObject *parent = nullptr);
+    AppController(Dependencies deps, AppRunMode mode = AppRunMode::Normal, QObject *parent = nullptr);
     ~AppController() override;
 
     bool start();
     void requestSettings();
     void showAbout();
     void showWelcome();
+    void presentStartupFailure();
 
     // Exposed for tests: whether the idle-fidget scheduler is currently armed.
     bool isIdleFidgetArmed() const;
@@ -114,6 +138,10 @@ private:
     BehaviorController *m_behavior;
     IdleActivityScheduler *m_idleScheduler;
     std::optional<V2AnimationState> m_activeFidget;
+    AppNotifier *m_notifier = nullptr;
+    bool m_ownsNotifier = true;
+    bool m_ownsLoginItem = true;
+    std::function<bool()> m_systemTrayAvailable;
     QuoteProvider *m_quoteProvider;
     SpeechBubble *m_speechBubble;
     InputActivitySource *m_inputSource;

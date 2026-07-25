@@ -4,6 +4,10 @@
 
 enum class InputStartResult {
     Started,
+    // The OS access prompt was just shown (permission was undetermined). The tap
+    // is not running yet; the caller should let the system prompt stand alone
+    // rather than stacking its own dialog, then re-enable once access is granted.
+    PermissionRequested,
     PermissionDenied,
     Failed,
 };

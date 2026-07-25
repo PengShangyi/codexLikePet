@@ -22,4 +22,5 @@ private:
 
     __CFMachPort *m_eventTap = nullptr;
     __CFRunLoopSource *m_runLoopSource = nullptr;
+    bool m_requestedAccess = false;
 };

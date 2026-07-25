@@ -18,7 +18,16 @@ InputStartResult MacInputActivitySource::start()
 {
     if (isActive()) return InputStartResult::Started;
     if (!CGPreflightListenEventAccess() && !CGRequestListenEventAccess()) {
-        return InputStartResult::PermissionDenied;
+        // CGRequestListenEventAccess shows the system prompt the first time (when
+        // access is undetermined) and returns false until the user decides; once
+        // denied it just returns false without a prompt. Report the very first
+        // not-granted attempt as PermissionRequested so the caller lets that OS
+        // prompt stand alone; any later attempt is a genuine denial that should
+        // route the user to System Settings.
+        const bool firstAsk = !m_requestedAccess;
+        m_requestedAccess = true;
+        return firstAsk ? InputStartResult::PermissionRequested
+                        : InputStartResult::PermissionDenied;
     }
 
     const CGEventMask mask = CGEventMaskBit(kCGEventKeyDown);

@@ -1,5 +1,6 @@
 #include "app/AppController.h"
 
+#include "app/AppNotifier.h"
 #include "platform/MacApplication.h"
 #include "pet/PetWindow.h"
 #include "settings/AppSettings.h"
@@ -34,11 +35,9 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QSystemTrayIcon>
-#include <QMessageBox>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QDesktopServices>
-#include <QPushButton>
 #include <QTimer>
 
 namespace {
@@ -60,6 +59,11 @@ QIcon makeTrayIcon()
 }
 
 AppController::AppController(AppRunMode mode, QObject *parent)
+    : AppController(Dependencies{}, mode, parent)
+{
+}
+
+AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent)
     : QObject(parent)
     , m_trayIcon(new QSystemTrayIcon(this))
     , m_menu(new QMenu)
@@ -67,32 +71,42 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     , m_visibilityAction(nullptr)
     , m_settingsAction(nullptr)
     , m_quitAction(nullptr)
-    , m_settings(new AppSettings(this))
+    , m_settings(deps.settings ? deps.settings : new AppSettings(this))
     , m_localization(new Localization(m_settings, this))
     , m_settingsWindow(new SettingsWindow(m_settings, m_localization))
     , m_petWindow(new PetWindow(m_settings))
-    , m_petLibrary(new PetLibrary({}, {}, this))
+    , m_petLibrary(new PetLibrary(deps.builtInPetRoot, deps.userPetRoot, this))
     , m_importer(new PetPackageImporter(PetStore()))
     , m_atlasCache(new AtlasCache(2))
     , m_animationPlayer(new AnimationPlayer(this))
     , m_behavior(new BehaviorController(this))
-    , m_idleScheduler(new IdleActivityScheduler({}, this))
-    , m_quoteProvider(new LocalQuoteProvider(
+    , m_idleScheduler(new IdleActivityScheduler(deps.idlePolicy, this))
+    , m_quoteProvider(deps.quoteProvider ? deps.quoteProvider : new LocalQuoteProvider(
           [localization = m_localization] { return localization->usesChinese(); },
           this))
     , m_speechBubble(new SpeechBubble)
-    , m_inputSource(new MacInputActivitySource(this))
+    , m_inputSource(deps.input ? deps.input : new MacInputActivitySource(this))
     , m_typingDetector(new TypingActivityDetector(m_inputSource, 1500, this))
-    , m_environmentClock(new SystemEnvironmentClock(this))
+    , m_environmentClock(deps.clock ? deps.clock : new SystemEnvironmentClock(this))
     , m_environmentResolver(new EnvironmentResolver(m_settings, m_environmentClock, this))
-    , m_systemActivity(new MacSystemActivitySource(this))
+    , m_systemActivity(deps.systemActivity ? deps.systemActivity : new MacSystemActivitySource(this))
     , m_motionController(new MotionController(m_settings, m_systemActivity, this))
-    , m_loginItemController(new MacLoginItemController)
+    , m_loginItemController(deps.loginItem ? deps.loginItem : new MacLoginItemController)
     , m_loginItemCoordinator(new LoginItemCoordinator(m_settings, m_loginItemController, this))
     , m_clickCompletionTimer(new QTimer(this))
     , m_typingReturnTimer(new QTimer(this))
     , m_suppressSystemMutations(mode == AppRunMode::RuntimeCheck)
 {
+    m_ownsLoginItem = (deps.loginItem == nullptr);
+    m_systemTrayAvailable = deps.systemTrayAvailable
+        ? deps.systemTrayAvailable
+        : std::function<bool()>([] { return QSystemTrayIcon::isSystemTrayAvailable(); });
+    if (deps.notifier) {
+        m_notifier = deps.notifier;
+        m_ownsNotifier = false;
+    } else {
+        m_notifier = new QtAppNotifier(m_trayIcon, m_settingsWindow);
+    }
     m_onboardingWindow = new OnboardingWindow(m_localization);
     m_aboutWindow = new AboutWindow(m_localization);
     const auto applyPetAccessibility = [this] {
@@ -201,9 +215,7 @@ AppController::AppController(AppRunMode mode, QObject *parent)
     connect(m_systemActivity, &SystemActivitySource::willSleep, this, &AppController::handleSystemSleep);
     connect(m_systemActivity, &SystemActivitySource::didWake, this, &AppController::handleSystemWake);
     connect(m_loginItemCoordinator, &LoginItemCoordinator::updateFailed, this, [this](const QString &message) {
-        QMessageBox::warning(m_settingsWindow,
-                             m_localization->text(TextKey::LoginItemErrorTitle),
-                             message);
+        m_notifier->warn(m_localization->text(TextKey::LoginItemErrorTitle), message);
     });
 }
 
@@ -218,17 +230,18 @@ AppController::~AppController()
     delete m_importer;
     delete m_atlasCache;
     delete m_speechBubble;
-    delete m_loginItemController;
+    if (m_ownsLoginItem) delete m_loginItemController;
+    if (m_ownsNotifier) delete m_notifier;
 }
 
 bool AppController::start()
 {
-    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+    if (!m_systemTrayAvailable()) {
         return false;
     }
 
     QApplication::setQuitOnLastWindowClosed(false);
-    MacApplication::setAccessoryActivationPolicy();
+    if (!m_suppressSystemMutations) MacApplication::setAccessoryActivationPolicy();
 
     m_visibilityAction = m_menu->addAction(QString());
     connect(m_visibilityAction, &QAction::triggered, this, [this] {
@@ -327,15 +340,14 @@ void AppController::setTypingMonitoringEnabled(bool enabled)
 
     m_settings->setTypingDetectionEnabled(false);
     m_typingDetector->reset();
-    QMessageBox box(QMessageBox::Information,
-                    m_localization->text(TextKey::InputPermissionTitle),
-                    m_localization->text(TextKey::InputPermissionBody),
-                    QMessageBox::Cancel,
-                    m_settingsWindow);
-    QPushButton *openButton = box.addButton(m_localization->text(TextKey::OpenSystemSettings),
-                                            QMessageBox::AcceptRole);
-    box.exec();
-    if (box.clickedButton() == openButton) {
+    // First-time request: the system access prompt is already on screen. Don't
+    // stack our own dialog on top of it; the user allows there, then re-enables.
+    if (result == InputStartResult::PermissionRequested) return;
+    const AppNotifier::PermissionChoice choice = m_notifier->promptInputPermission(
+        m_localization->text(TextKey::InputPermissionTitle),
+        m_localization->text(TextKey::InputPermissionBody),
+        m_localization->text(TextKey::OpenSystemSettings));
+    if (choice == AppNotifier::PermissionChoice::OpenSettings) {
         QDesktopServices::openUrl(QUrl(QStringLiteral("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")));
     }
 }
@@ -388,6 +400,7 @@ void AppController::loadCurrentVariant()
     const QSharedPointer<PetAtlas> atlas = m_atlasCache->load(atlasPath, &error);
     if (!atlas) {
         m_settingsWindow->setValidationReport(error, true);
+        m_notifier->notifyPetLoadError(m_localization->text(TextKey::PetLoadErrorTitle), error);
         return;
     }
     m_currentAtlas = atlas;
@@ -715,9 +728,7 @@ void AppController::importPet(bool directory)
     const PetImportResult result = m_importer->importPath(path);
     if (!result.success) {
         m_settingsWindow->setValidationReport(result.error, true);
-        QMessageBox::warning(m_settingsWindow,
-                             m_localization->text(TextKey::ImportFailed),
-                             result.error);
+        m_notifier->warn(m_localization->text(TextKey::ImportFailed), result.error);
         return;
     }
     m_settings->setSelectedPetId(result.validation.package.id);
@@ -730,12 +741,11 @@ void AppController::removeSelectedPet()
     const QString id = m_settingsWindow->selectedPetId();
     const PetRecord *record = m_petLibrary->find(id);
     if (!record || record->builtIn) return;
-    if (QMessageBox::question(m_settingsWindow,
-                              QStringLiteral("Potato"),
-                              m_localization->text(TextKey::RemoveConfirmation)) != QMessageBox::Yes) return;
+    if (!m_notifier->confirmRemoval(QStringLiteral("Potato"),
+                                    m_localization->text(TextKey::RemoveConfirmation))) return;
     QString error;
     if (!m_petLibrary->removeCustomPet(id, &error)) {
-        QMessageBox::warning(m_settingsWindow, m_localization->text(TextKey::ImportFailed), error);
+        m_notifier->warn(m_localization->text(TextKey::ImportFailed), error);
         return;
     }
     const QString fallback = m_petLibrary->firstAvailableId();
@@ -745,7 +755,7 @@ void AppController::removeSelectedPet()
 
 void AppController::requestSettings()
 {
-    MacApplication::activateIgnoringOtherApps();
+    if (!m_suppressSystemMutations) MacApplication::activateIgnoringOtherApps();
     m_settingsWindow->show();
     m_settingsWindow->raise();
     m_settingsWindow->activateWindow();
@@ -754,7 +764,7 @@ void AppController::requestSettings()
 
 void AppController::showWelcome()
 {
-    MacApplication::activateIgnoringOtherApps();
+    if (!m_suppressSystemMutations) MacApplication::activateIgnoringOtherApps();
     m_onboardingWindow->show();
     m_onboardingWindow->raise();
     m_onboardingWindow->activateWindow();
@@ -762,10 +772,17 @@ void AppController::showWelcome()
 
 void AppController::showAbout()
 {
-    MacApplication::activateIgnoringOtherApps();
+    if (!m_suppressSystemMutations) MacApplication::activateIgnoringOtherApps();
     m_aboutWindow->show();
     m_aboutWindow->raise();
     m_aboutWindow->activateWindow();
+}
+
+void AppController::presentStartupFailure()
+{
+    if (m_suppressSystemMutations) return;
+    m_notifier->showFatalStartup(m_localization->text(TextKey::StartupFailedTitle),
+                                 m_localization->text(TextKey::StartupFailedBody));
 }
 
 void AppController::setPetVisible(bool visible)

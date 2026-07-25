@@ -1,0 +1,351 @@
+#include "app/AppController.h"
+#include "app/AppNotifier.h"
+#include "environment/EnvironmentClock.h"
+#include "input/InputActivitySource.h"
+#include "login/LoginItemController.h"
+#include "pet/PetAtlas.h"
+#include "platform/SystemActivitySource.h"
+#include "settings/AppSettings.h"
+
+#include <QDir>
+#include <QFile>
+#include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTemporaryDir>
+#include <QTest>
+
+// Purpose-built doubles for AppController's platform boundaries. Each is stack
+// allocated in the test and injected via AppController::Dependencies, so no real
+// CGEventTap / NSWorkspace / SMAppService is touched and no modal dialog blocks.
+
+class FakeInput final : public InputActivitySource
+{
+    Q_OBJECT
+public:
+    using InputActivitySource::InputActivitySource;
+    InputStartResult startResult = InputStartResult::Started;
+    InputStartResult start() override
+    {
+        if (startResult == InputStartResult::Started) m_active = true;
+        return startResult;
+    }
+    void stop() override { m_active = false; }
+    bool isActive() const override { return m_active; }
+    void simulateInvalidation()
+    {
+        m_active = false;
+        emit monitoringInvalidated();
+    }
+    // Stands in for one key-down reaching the (listen-only) event tap.
+    void simulateActivity() { emit activityDetected(); }
+
+private:
+    bool m_active = false;
+};
+
+class FakeSystem final : public SystemActivitySource
+{
+    Q_OBJECT
+public:
+    using SystemActivitySource::SystemActivitySource;
+    bool systemReduceMotion() const override { return m_reduced; }
+    void setReduced(bool value)
+    {
+        m_reduced = value;
+        emit reduceMotionChanged(value);
+    }
+    void sleep() { emit willSleep(); }
+    void wakeUp() { emit didWake(); }
+
+private:
+    bool m_reduced = false;
+};
+
+class FakeClock final : public EnvironmentClock
+{
+    Q_OBJECT
+public:
+    using EnvironmentClock::EnvironmentClock;
+    QDateTime now() const override { return moment; }
+    QDateTime moment = QDateTime(QDate(2024, 4, 15), QTime(12, 0));
+};
+
+class FakeLoginItem final : public LoginItemController
+{
+public:
+    bool setEnabled(bool, QString *) override { return true; }
+};
+
+class RecordingNotifier final : public AppNotifier
+{
+public:
+    int petLoadErrors = 0;
+    int permissionPrompts = 0;
+    int warnings = 0;
+    PermissionChoice permissionResult = PermissionChoice::Dismiss;
+
+    void notifyPetLoadError(const QString &, const QString &) override { ++petLoadErrors; }
+    PermissionChoice promptInputPermission(const QString &, const QString &, const QString &) override
+    {
+        ++permissionPrompts;
+        return permissionResult;
+    }
+    void warn(const QString &, const QString &) override { ++warnings; }
+    bool confirmRemoval(const QString &, const QString &) override { return true; }
+    void showFatalStartup(const QString &, const QString &) override {}
+};
+
+class AppControllerTest final : public QObject
+{
+    Q_OBJECT
+
+    // Writes a minimal but contract-valid Codex v2 pet the PetLibrary will accept.
+    static bool createPet(const QString &root, const QString &id, const QString &name,
+                          bool withTypingClip = false)
+    {
+        const QString directory = QDir(root).filePath(id);
+        if (!QDir().mkpath(directory)) return false;
+        QImage image(PetAtlas::Width, PetAtlas::Height, QImage::Format_RGBA8888);
+        image.fill(Qt::transparent);
+        for (int row = 0; row < PetAtlas::Rows; ++row) {
+            const int columns = row <= 8
+                ? PetAtlas::animationSpec(static_cast<V2AnimationState>(row)).frameCount
+                : 8;
+            for (int column = 0; column < columns; ++column)
+                image.setPixelColor(column * 192 + 1, row * 208 + 1, Qt::white);
+        }
+        if (!image.save(QDir(directory).filePath(QStringLiteral("spritesheet.png")))) return false;
+
+        QJsonObject manifest{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("displayName"), name},
+            {QStringLiteral("description"), QStringLiteral("test")},
+            {QStringLiteral("spriteVersionNumber"), 2},
+            {QStringLiteral("spritesheetPath"), QStringLiteral("spritesheet.png")}};
+        QFile file(QDir(directory).filePath(QStringLiteral("pet.json")));
+        if (!file.open(QIODevice::WriteOnly)) return false;
+        if (file.write(QJsonDocument(manifest).toJson()) <= 0) return false;
+
+        if (withTypingClip) {
+            if (!QDir().mkpath(QDir(directory).filePath(QStringLiteral("clips")))) return false;
+            // Reuse a real 3-frame typing clip so it passes package validation and
+            // AnimationClip::load exactly as the shipped assets do.
+            const QString src = QStringLiteral(
+                POTATO_SOURCE_DIR "/assets/Pets/potato/clips/spring-day-typing.webp");
+            if (!QFile::copy(src, QDir(directory).filePath(QStringLiteral("clips/typing.webp")))) return false;
+            // Clips are a Potato extension: they live in potato.json beside pet.json.
+            const QJsonObject clipDef{{QStringLiteral("path"), QStringLiteral("clips/typing.webp")},
+                                      {QStringLiteral("durationsMs"), QJsonArray{130, 130, 130}}};
+            QFile potato(QDir(directory).filePath(QStringLiteral("potato.json")));
+            if (!potato.open(QIODevice::WriteOnly)) return false;
+            return potato.write(QJsonDocument(QJsonObject{
+                                    {QStringLiteral("schemaVersion"), 1},
+                                    {QStringLiteral("variants"), QJsonObject{}},
+                                    {QStringLiteral("clips"), QJsonObject{{QStringLiteral("typing"), clipDef}}},
+                                    {QStringLiteral("variantClips"), QJsonObject{}}})
+                                    .toJson())
+                > 0;
+        }
+        return true;
+    }
+
+    struct Fixture {
+        QTemporaryDir pets;
+        QTemporaryDir config;
+        FakeInput input;
+        FakeSystem system;
+        FakeClock clock;
+        FakeLoginItem login;
+        RecordingNotifier notifier;
+
+        AppController::Dependencies deps(AppSettings *settings)
+        {
+            AppController::Dependencies d;
+            d.settings = settings;
+            d.input = &input;
+            d.systemActivity = &system;
+            d.clock = &clock;
+            d.loginItem = &login;
+            d.notifier = &notifier;
+            d.builtInPetRoot = pets.path();
+            d.userPetRoot = QDir(config.path()).filePath(QStringLiteral("userpets"));
+            d.systemTrayAvailable = [] { return true; };
+            return d;
+        }
+        QString settingsPath() { return config.filePath(QStringLiteral("settings.ini")); }
+    };
+
+private slots:
+    void fallsBackToFirstAvailablePetWhenSelectionMissing()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+        settings.setSelectedPetId(QStringLiteral("ghost"));
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        QCOMPARE(settings.selectedPetId(), QStringLiteral("alpha"));
+    }
+
+    void permissionDeniedDisablesTypingAndPrompts()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        fx.input.startResult = InputStartResult::PermissionDenied;
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        settings.setTypingDetectionEnabled(true);
+
+        QVERIFY(!settings.typingDetectionEnabled());
+        QCOMPARE(fx.notifier.permissionPrompts, 1);
+        QVERIFY(!fx.input.isActive());
+    }
+
+    // First-time enable when the OS is showing its own access prompt: the setting
+    // is turned back off (can't monitor yet) but we must NOT stack our own dialog
+    // on top of the system prompt.
+    void firstPermissionRequestDoesNotStackADialog()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        fx.input.startResult = InputStartResult::PermissionRequested;
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        settings.setTypingDetectionEnabled(true);
+
+        QVERIFY(!settings.typingDetectionEnabled());
+        QCOMPARE(fx.notifier.permissionPrompts, 0); // OS prompt stands alone
+        QVERIFY(!fx.input.isActive());
+    }
+
+    void monitoringInvalidationDisablesTyping()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        settings.setTypingDetectionEnabled(true);
+        QVERIFY(settings.typingDetectionEnabled());
+        QVERIFY(fx.input.isActive());
+
+        fx.input.simulateInvalidation();
+        QVERIFY(!settings.typingDetectionEnabled());
+    }
+
+    void sleepStopsAndWakeRestartsTypingMonitoring()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        settings.setTypingDetectionEnabled(true);
+        QVERIFY(fx.input.isActive());
+
+        fx.system.sleep();
+        QVERIFY(!fx.input.isActive());
+
+        fx.system.wakeUp();
+        QVERIFY(fx.input.isActive());
+    }
+
+    void idleFidgetArmsOnlyWhenIdleVisibleAwakeAndMotionAllowed()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+        auto deps = fx.deps(&settings);
+        deps.idlePolicy.nextIntervalMs = [] { return 100000; }; // long: stays armed for the test
+        deps.idlePolicy.nextAnimation = [] { return V2AnimationState::Jumping; };
+
+        AppController controller(deps, AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        QVERIFY(controller.isIdleFidgetArmed()); // idle + visible + awake + motion + atlas
+
+        fx.system.setReduced(true);
+        QVERIFY(!controller.isIdleFidgetArmed()); // reduced motion disarms
+        fx.system.setReduced(false);
+        QVERIFY(controller.isIdleFidgetArmed());
+
+        fx.system.sleep();
+        QVERIFY(!controller.isIdleFidgetArmed()); // asleep disarms
+        fx.system.wakeUp();
+        QVERIFY(controller.isIdleFidgetArmed()); // re-armed on wake
+    }
+
+    // End-to-end typing wiring: a keystroke must move the pet out of Idle (into
+    // Typing), then it must return to Idle after the inactivity window. Uses the
+    // idle-fidget scheduler as an observable proxy for "the pet is Idle" — it is
+    // armed only while Idle. Exercises InputActivitySource -> TypingActivityDetector
+    // -> BehaviorController -> AppController::applyBehaviorState/updateIdleScheduler.
+    void typingActivityMovesThePetOutOfIdleThenBack()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+        auto deps = fx.deps(&settings);
+        deps.idlePolicy.nextIntervalMs = [] { return 100000; }; // long: stays armed while Idle
+        deps.idlePolicy.nextAnimation = [] { return V2AnimationState::Jumping; };
+
+        AppController controller(deps, AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        settings.setTypingDetectionEnabled(true);
+        QVERIFY(fx.input.isActive());
+        QVERIFY(controller.isIdleFidgetArmed()); // Idle at rest
+
+        fx.input.simulateActivity();             // a key-down
+        QVERIFY(!controller.isIdleFidgetArmed()); // Typing is not Idle -> disarmed
+        QVERIFY(!controller.isTypingPressActive()); // no typing clip here -> running-row fallback
+
+        // TypingActivityDetector's 1500ms inactivity timer then clears typing and
+        // the pet returns to Idle, re-arming the scheduler.
+        QTRY_VERIFY_WITH_TIMEOUT(controller.isIdleFidgetArmed(), 4000);
+    }
+
+    // With a dedicated typing clip, each keystroke engages the clip-driven press
+    // machinery (held clip, advanced per key). Exercises the full chain including
+    // AppController::onTypingKey/beginTypingAnimation and the clip-vs-fallback choice.
+    void keystrokesEngageTheTypingPressAnimation()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha"), true));
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        QVERIFY2(controller.isIdleFidgetArmed(), "pet/atlas did not load (clip validation?)");
+        settings.setTypingDetectionEnabled(true);
+        QVERIFY(fx.input.isActive());
+        QVERIFY(!controller.isTypingPressActive()); // idle at rest
+
+        fx.input.simulateActivity();                 // first key -> Typing + clip-driven press
+        QVERIFY(controller.isTypingPressActive());
+        fx.input.simulateActivity();                 // further keys pulse; still engaged, no crash
+        QVERIFY(controller.isTypingPressActive());
+
+        // After the inactivity window, typing clears and press mode disengages.
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.isTypingPressActive(), 4000);
+    }
+
+    void startsCleanlyWithNoPetsAvailable()
+    {
+        Fixture fx; // no pets seeded
+        AppSettings settings(fx.settingsPath());
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start()); // empty library must not crash or fail startup
+    }
+};
+
+QTEST_MAIN(AppControllerTest)
+
+#include "test_app_controller.moc"

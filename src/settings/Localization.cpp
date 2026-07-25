@@ -65,6 +65,9 @@ QString Localization::text(TextKey key) const
     case TextKey::PreviewAnimation: return zh ? QStringLiteral("预览动作") : QStringLiteral("Preview animation");
     case TextKey::PreviewClip: return zh ? QStringLiteral("扩展动画条") : QStringLiteral("Extension clip");
     case TextKey::ResourceFallbacks: return zh ? QStringLiteral("资源与回退") : QStringLiteral("Resources and fallbacks");
+    case TextKey::PetLoadErrorTitle: return zh ? QStringLiteral("无法加载宠物") : QStringLiteral("Couldn't load pet");
+    case TextKey::StartupFailedTitle: return zh ? QStringLiteral("Potato 无法启动") : QStringLiteral("Potato can't start");
+    case TextKey::StartupFailedBody: return zh ? QStringLiteral("无法创建菜单栏图标。Potato 需要可用的系统菜单栏才能运行。") : QStringLiteral("The menu bar item couldn't be created. Potato needs an available system menu bar to run.");
     case TextKey::OnboardingTitle: return zh ? QStringLiteral("欢迎使用 Potato") : QStringLiteral("Welcome to Potato");
     case TextKey::OnboardingIntro: return zh ? QStringLiteral("Potato 是一只安静地待在桌面上的小宠物。几点须知：") : QStringLiteral("Potato is a little desktop companion that quietly lives on your screen. A few things to know:");
     case TextKey::OnboardingMenuBarHeading: return zh ? QStringLiteral("它住在菜单栏") : QStringLiteral("It lives in the menu bar");

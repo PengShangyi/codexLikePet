@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
                          }
                      });
     if (!controller.start()) {
+        controller.presentStartupFailure();
         return 1;
     }
     return application.exec();
