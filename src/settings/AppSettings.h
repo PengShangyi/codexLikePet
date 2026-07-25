@@ -36,6 +36,10 @@ public:
 
     double scale() const;
     double animationSpeed() const;
+    double opacity() const;
+    // Suppresses dragging only. Clicks, click reactions, and the context menu keep
+    // working, so this is not click-through -- which the project contract rules out.
+    bool positionLocked() const;
     bool alwaysOnTop() const;
     bool launchAtLogin() const;
     bool typingDetectionEnabled() const;
@@ -59,6 +63,8 @@ public:
 public slots:
     void setScale(double value);
     void setAnimationSpeed(double value);
+    void setOpacity(double value);
+    void setPositionLocked(bool value);
     void setAlwaysOnTop(bool value);
     void setLaunchAtLogin(bool value);
     void setTypingDetectionEnabled(bool value);
@@ -73,6 +79,8 @@ public slots:
 signals:
     void scaleChanged(double value);
     void animationSpeedChanged(double value);
+    void opacityChanged(double value);
+    void positionLockedChanged(bool value);
     void alwaysOnTopChanged(bool value);
     void launchAtLoginChanged(bool value);
     void typingDetectionEnabledChanged(bool value);

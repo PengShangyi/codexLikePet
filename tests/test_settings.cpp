@@ -137,6 +137,52 @@ private slots:
         QVERIFY(!cleared.hasWindowPosition());
     }
 
+    // Opacity clamps to a narrower range than scale and speed: never below 0.3,
+    // because a fully transparent pet cannot be clicked or found again.
+    void opacityClampsToItsOwnNarrowerRange()
+    {
+        QTemporaryDir temp;
+        AppSettings settings(temp.filePath(QStringLiteral("settings.ini")));
+        QCOMPARE(settings.opacity(), 1.0);
+
+        QSignalSpy spy(&settings, &AppSettings::opacityChanged);
+        settings.setOpacity(0.75);
+        QCOMPARE(settings.opacity(), 0.75);
+        QCOMPARE(spy.count(), 1);
+
+        settings.setOpacity(0.0);
+        QCOMPARE(settings.opacity(), 0.3);
+        settings.setOpacity(4.0);
+        QCOMPARE(settings.opacity(), 1.0);
+        settings.setOpacity(std::numeric_limits<double>::quiet_NaN());
+        QCOMPARE(settings.opacity(), 1.0);
+
+        // Scale still uses the wider factor range, so the shared helper did not get
+        // narrowed for everyone.
+        settings.setScale(2.0);
+        QCOMPARE(settings.scale(), 2.0);
+    }
+
+    void positionLockDefaultsOffAndRoundTrips()
+    {
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("settings.ini"));
+        {
+            AppSettings settings(path);
+            QCOMPARE(settings.positionLocked(), false);
+
+            QSignalSpy spy(&settings, &AppSettings::positionLockedChanged);
+            settings.setPositionLocked(true);
+            QCOMPARE(settings.positionLocked(), true);
+            QCOMPARE(spy.count(), 1);
+
+            settings.setPositionLocked(true);  // no change, no signal
+            QCOMPARE(spy.count(), 1);
+        }
+        AppSettings restored(path);
+        QCOMPARE(restored.positionLocked(), true);
+    }
+
     void recoversCorruptAndNonFiniteNumericValues()
     {
         QTemporaryDir temp;

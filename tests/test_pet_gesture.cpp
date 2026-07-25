@@ -13,22 +13,51 @@ class PetGestureTest final : public QObject
 private slots:
     void subThresholdMoveDoesNotStartDrag()
     {
-        const PetGesture::MoveDecision d = PetGesture::onMove(false, QPoint(2, 1), 2, 4);
+        const PetGesture::MoveDecision d = PetGesture::onMove(false, QPoint(2, 1), 2, PetGesture::DragLock::Unlocked, 4);
         QVERIFY(!d.startDrag);
     }
 
     void crossingThresholdStartsDragWithDirection()
     {
-        const PetGesture::MoveDecision right = PetGesture::onMove(false, QPoint(6, 0), 6, 4);
+        const PetGesture::MoveDecision right = PetGesture::onMove(false, QPoint(6, 0), 6, PetGesture::DragLock::Unlocked, 4);
         QVERIFY(right.startDrag);
         QCOMPARE(right.direction, HorizontalDragDirection::Right);
     }
 
     void alreadyDraggingReportsDirectionWithoutRestarting()
     {
-        const PetGesture::MoveDecision left = PetGesture::onMove(true, QPoint(-40, 0), -8, 4);
+        const PetGesture::MoveDecision left = PetGesture::onMove(true, QPoint(-40, 0), -8, PetGesture::DragLock::Unlocked, 4);
         QVERIFY(!left.startDrag); // does not re-start an in-progress drag
         QCOMPARE(left.direction, HorizontalDragDirection::Left);
+    }
+
+    // The lock suppresses dragging and nothing else. That distinction is the whole
+    // reason it does not amount to click-through, which docs/PROJECT.md rules out:
+    // the pet stops moving but stays interactive.
+    void lockedPetNeverStartsADragHoweverFarThePointerTravels()
+    {
+        const PetGesture::MoveDecision far =
+            PetGesture::onMove(false, QPoint(400, 300), 40, PetGesture::DragLock::Locked, 4);
+        QVERIFY(!far.startDrag);
+        QCOMPARE(far.direction, HorizontalDragDirection::None);
+
+        // Even mid-drag, a lock reports no further motion, so the window stops
+        // following the pointer instead of continuing to the release.
+        const PetGesture::MoveDecision during =
+            PetGesture::onMove(true, QPoint(-40, 0), -8, PetGesture::DragLock::Locked, 4);
+        QVERIFY(!during.startDrag);
+        QCOMPARE(during.direction, HorizontalDragDirection::None);
+    }
+
+    void lockedPetStillReportsAClickOnRelease()
+    {
+        // onRelease sees dragging=false because the lock stopped the drag from ever
+        // beginning, so the click path -- click reaction, speech bubble -- is intact.
+        const PetGesture::ReleaseDecision d =
+            PetGesture::onRelease(false, QPoint(400, 400), kPetSize, kAvailable, 24);
+        QVERIFY(d.wasClick);
+        QCOMPARE(d.snapEdge, SnapEdge::None);
+        QCOMPARE(d.snappedTopLeft, QPoint(400, 400));
     }
 
     void releaseWithoutDraggingIsAClick()

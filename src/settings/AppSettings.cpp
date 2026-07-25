@@ -8,12 +8,22 @@
 #include <cmath>
 
 namespace {
-double boundedSetting(const QVariant &stored, double fallback)
+// Bounds are parameters rather than constants because opacity clamps to a
+// different range than scale and speed; the read and the write below must always
+// be given the same pair.
+double boundedSetting(const QVariant &stored, double fallback, double minimum, double maximum)
 {
     bool ok = false;
     const double value = stored.toDouble(&ok);
-    return ok && std::isfinite(value) ? std::clamp(value, 0.5, 2.0) : fallback;
+    return ok && std::isfinite(value) ? std::clamp(value, minimum, maximum) : fallback;
 }
+
+constexpr double factorMinimum = 0.5;
+constexpr double factorMaximum = 2.0;
+// Not zero: a fully transparent pet cannot be clicked or found again, which is
+// indistinguishable from having lost the window.
+constexpr double opacityMinimum = 0.3;
+constexpr double opacityMaximum = 1.0;
 }
 
 AppSettings::AppSettings(QObject *parent)
@@ -34,12 +44,25 @@ AppSettings::~AppSettings() = default;
 
 double AppSettings::scale() const
 {
-    return boundedSetting(m_settings->value(QStringLiteral("appearance/scale"), 1.0), 1.0);
+    return boundedSetting(m_settings->value(QStringLiteral("appearance/scale"), 1.0), 1.0,
+                          factorMinimum, factorMaximum);
 }
 
 double AppSettings::animationSpeed() const
 {
-    return boundedSetting(m_settings->value(QStringLiteral("appearance/animationSpeed"), 1.0), 1.0);
+    return boundedSetting(m_settings->value(QStringLiteral("appearance/animationSpeed"), 1.0), 1.0,
+                          factorMinimum, factorMaximum);
+}
+
+double AppSettings::opacity() const
+{
+    return boundedSetting(m_settings->value(QStringLiteral("appearance/opacity"), 1.0), 1.0,
+                          opacityMinimum, opacityMaximum);
+}
+
+bool AppSettings::positionLocked() const
+{
+    return m_settings->value(QStringLiteral("behavior/positionLocked"), false).toBool();
 }
 
 bool AppSettings::alwaysOnTop() const
@@ -119,13 +142,24 @@ void AppSettings::clearWindowPosition()
 
 void AppSettings::setScale(double value)
 {
-    value = std::isfinite(value) ? std::clamp(value, 0.5, 2.0) : 1.0;
+    value = std::isfinite(value) ? std::clamp(value, factorMinimum, factorMaximum) : 1.0;
     if (writeIfChanged(QStringLiteral("appearance/scale"), value, scale())) emit scaleChanged(value);
+}
+
+void AppSettings::setOpacity(double value)
+{
+    value = std::isfinite(value) ? std::clamp(value, opacityMinimum, opacityMaximum) : 1.0;
+    if (writeIfChanged(QStringLiteral("appearance/opacity"), value, opacity())) emit opacityChanged(value);
+}
+
+void AppSettings::setPositionLocked(bool value)
+{
+    if (writeIfChanged(QStringLiteral("behavior/positionLocked"), value, positionLocked())) emit positionLockedChanged(value);
 }
 
 void AppSettings::setAnimationSpeed(double value)
 {
-    value = std::isfinite(value) ? std::clamp(value, 0.5, 2.0) : 1.0;
+    value = std::isfinite(value) ? std::clamp(value, factorMinimum, factorMaximum) : 1.0;
     if (writeIfChanged(QStringLiteral("appearance/animationSpeed"), value, animationSpeed())) emit animationSpeedChanged(value);
 }
 

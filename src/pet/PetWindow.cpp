@@ -26,15 +26,19 @@ PetWindow::PetWindow(AppSettings *settings, QWidget *parent)
     setAttribute(Qt::WA_NoSystemBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
     setAutoFillBackground(false);
-    setCursor(Qt::OpenHandCursor);
 
     m_scaleFactor = settings->scale();
     m_alwaysOnTop = settings->alwaysOnTop();
+    m_positionLocked = settings->positionLocked();
+    applyRestingCursor();
+    setOpacity(settings->opacity());
     if (!m_alwaysOnTop) {
         setWindowFlag(Qt::WindowStaysOnTopHint, false);
     }
     updateWindowSize();
     connect(settings, &AppSettings::scaleChanged, this, &PetWindow::setScaleFactor);
+    connect(settings, &AppSettings::opacityChanged, this, &PetWindow::setOpacity);
+    connect(settings, &AppSettings::positionLockedChanged, this, &PetWindow::setPositionLocked);
     connect(settings, &AppSettings::alwaysOnTopChanged, this, &PetWindow::setAlwaysOnTop);
 
     const auto watchScreen = [this](QScreen *screen) {
@@ -90,6 +94,30 @@ void PetWindow::setScaleFactor(double factor)
                                                primaryAvailableGeometry()));
         updateSnapEdge(previousEdge);
     }
+}
+
+void PetWindow::setOpacity(double opacity)
+{
+    // Mirrors AppSettings' floor: a fully transparent pet cannot be clicked or found
+    // again. The speech bubble deliberately does not follow this -- a translucent
+    // bubble would be unreadable, which is the opposite of its purpose.
+    setWindowOpacity(qBound(0.3, opacity, 1.0));
+}
+
+void PetWindow::setPositionLocked(bool locked)
+{
+    if (m_positionLocked == locked) return;
+    m_positionLocked = locked;
+    // Deliberately does not interrupt a drag already in flight: reaching this needs
+    // the settings window focused, so it cannot happen mid-gesture in practice, and
+    // the drag ends normally on release.
+    if (!m_pointerDown) applyRestingCursor();
+}
+
+void PetWindow::applyRestingCursor()
+{
+    // An open hand invites a drag, so a locked pet must not show one.
+    setCursor(m_positionLocked ? Qt::ArrowCursor : Qt::OpenHandCursor);
 }
 
 void PetWindow::setAlwaysOnTop(bool enabled)
@@ -219,7 +247,10 @@ void PetWindow::mouseMoveEvent(QMouseEvent *event)
     const QPoint global = event->globalPosition().toPoint();
     const QPoint totalDelta = global - m_pressGlobal;
     const PetGesture::MoveDecision decision =
-        PetGesture::onMove(m_dragging, totalDelta, global.x() - m_lastGlobal.x(), 4);
+        PetGesture::onMove(m_dragging, totalDelta, global.x() - m_lastGlobal.x(),
+                           m_positionLocked ? PetGesture::DragLock::Locked
+                                            : PetGesture::DragLock::Unlocked,
+                           4);
     if (decision.startDrag) {
         m_dragging = true;
         updateSnapEdge(SnapEdge::None);
@@ -243,7 +274,7 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event)
         return;
     }
     m_pointerDown = false;
-    setCursor(Qt::OpenHandCursor);
+    applyRestingCursor();
     const PetGesture::ReleaseDecision decision =
         PetGesture::onRelease(m_dragging, pos(), size(), primaryAvailableGeometry(), 24);
     if (decision.wasClick) {

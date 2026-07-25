@@ -4,6 +4,7 @@
 #include "input/InputActivitySource.h"
 #include "login/LoginItemController.h"
 #include "pet/PetAtlas.h"
+#include "pet/PetWindow.h"
 #include "platform/SystemActivitySource.h"
 #include "settings/AppSettings.h"
 #include "settings/SettingsWindow.h"
@@ -190,6 +191,33 @@ private slots:
         AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
         QVERIFY(controller.start());
         QCOMPARE(settings.selectedPetId(), QStringLiteral("alpha"));
+    }
+
+    void opacitySettingReachesThePetWindowAndKeepsItVisible()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+
+        PetWindow *pet = nullptr;
+        for (QWidget *candidate : QApplication::topLevelWidgets()) {
+            if (auto *window = qobject_cast<PetWindow *>(candidate)) pet = window;
+        }
+        QVERIFY(pet);
+        QCOMPARE(pet->windowOpacity(), 1.0);
+
+        // setWindowOpacity round-trips through an 8-bit alpha, so 0.5 comes back as
+        // 127/255; compare within one step rather than exactly.
+        settings.setOpacity(0.5);
+        QVERIFY(qAbs(pet->windowOpacity() - 0.5) <= 1.0 / 255.0);
+
+        // Never fully transparent: an invisible pet cannot be clicked or found again,
+        // which is indistinguishable from having lost the window.
+        settings.setOpacity(0.0);
+        QVERIFY(qAbs(pet->windowOpacity() - 0.3) <= 1.0 / 255.0);
     }
 
     void permissionDeniedDisablesTypingAndPrompts()

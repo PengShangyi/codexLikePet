@@ -27,6 +27,10 @@ public:
 
 public slots:
     void setScaleFactor(double factor);
+    void setOpacity(double opacity);
+    // Suppresses dragging. Clicks and the context menu are untouched, so this is a
+    // position lock and not click-through -- the contract rules the latter out.
+    void setPositionLocked(bool locked);
     void setAlwaysOnTop(bool enabled);
     void restorePosition();
     void resetPosition();
@@ -59,6 +63,7 @@ private:
     QRect primaryAvailableGeometry() const;
     void updateWindowSize();
     void updateSnapEdge(SnapEdge edge);
+    void applyRestingCursor();
     // Position-only half of clampToPrimaryScreen(): clamps and re-resolves the
     // snap edge without touching the native window level. The public slot adds
     // the overlay re-push, which is only needed for display/wake events.
@@ -68,6 +73,7 @@ private:
     QImage m_frame;
     double m_scaleFactor = 1.0;
     bool m_alwaysOnTop = true;
+    bool m_positionLocked = false;
     bool m_smoothRendering = true;
     bool m_restoringPosition = false;
     bool m_pointerDown = false;

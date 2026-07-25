@@ -5,8 +5,15 @@ namespace PetGesture {
 MoveDecision onMove(bool alreadyDragging,
                     const QPoint &totalDeltaFromPress,
                     int deltaXSinceLast,
+                    DragLock lock,
                     int dragThreshold)
 {
+    // A locked pet never starts a drag and never reports a direction, so the caller
+    // has nothing to act on and the window stays put. The release still comes back
+    // as a click from onRelease(), which is what keeps the lock distinct from
+    // click-through.
+    if (lock == DragLock::Locked) return {};
+
     MoveDecision decision;
     decision.startDrag = !alreadyDragging
         && WindowPlacement::exceedsDragThreshold(totalDeltaFromPress, dragThreshold);
