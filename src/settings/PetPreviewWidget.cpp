@@ -12,6 +12,11 @@ PetPreviewWidget::PetPreviewWidget(QWidget *parent)
     , m_timer(new QTimer(this))
 {
     setMinimumHeight(230);
+    // paintEvent fills the whole rect (the checkerboard runs edge to edge), so
+    // tell Qt not to repaint what is behind us. Without this every preview frame
+    // dirtied the ancestors too, and repainting the enclosing QTabWidget's
+    // macOS-style chrome cost ~10x the preview itself while Settings was open.
+    setAttribute(Qt::WA_OpaquePaintEvent);
     m_timer->setSingleShot(true);
     connect(m_timer, &QTimer::timeout, this, &PetPreviewWidget::advance);
 }
