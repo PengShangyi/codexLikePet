@@ -75,6 +75,19 @@ never invents transitions:
   and `ClipContract` (`src/pet/`) holds the clip geometry and duration bounds. Both
   the validator and the runtime loaders call these rather than restating them; a
   rule must never be written out twice.
+- **`Theme` + the settings kit** (`src/ui/`) — `Theme` is the single home for every
+  color, metric, and font, and `Theme::styleSheet()` is the only `setStyleSheet`
+  call site in the app. It defines light and dark outright instead of deriving from
+  `QGuiApplication::palette()`, because `QStyleHints::colorSchemeChanged` fires
+  *before* Qt swaps that palette — deriving from it painted dark text on dark cards.
+  `SettingsCard`/`SettingsRow`/`SettingsPage`/`ValueSlider`/`InlineBanner`/
+  `Disclosure` compose the settings pages; a `SettingsRow` structurally requires a
+  `TextKey`, so no row can exist without a translatable label or an accessible name.
+  The stylesheet styles **containers only** — every native control (`QComboBox`,
+  `QSlider`, `QCheckBox`, `QTimeEdit`, `QPushButton`) is deliberately left unstyled
+  so `QMacStyle` keeps drawing it and it follows `NSAppearance` for free. Every
+  selector is qualified, because `QFileDialog`/`QMessageBox` are parented to the
+  settings window and inherit its sheet.
 - **Input** (`src/input/`) — `InputActivitySource` is the boundary
   (`MacInputActivitySource.mm`); `TypingActivityDetector` derives activity frequency
   from timestamps only.
@@ -120,12 +133,23 @@ is never installed into `~/.codex`.
 - Each test in `tests/CMakeLists.txt` is its own `qt_add_executable` linking only what
   it exercises — add new tests the same way rather than into a shared binary. Low-level
   modules come from the shared static libraries declared in the root `CMakeLists.txt`
-  (`potato_settings_core`, `potato_environment`, `potato_geometry`, `potato_atlas`,
-  `potato_policy`, `potato_package`, `potato_overlay`); link those instead of relisting
-  their sources, and list any other source directly. Modules that pull in a system
+  (`potato_settings_core`, `potato_theme`, `potato_ui`, `potato_environment`,
+  `potato_geometry`, `potato_atlas`, `potato_policy`, `potato_package`,
+  `potato_overlay`); link those instead of relisting their sources, and list any
+  other source directly. `potato_theme` is Gui-only so the tray icon, the pet's
+  fallback drawing, and the speech bubble can share the brand palette without
+  acquiring a Widgets and `Localization` dependency; `potato_ui` adds the widgets. Modules that pull in a system
   framework stay out of the libraries so a test can still link the pure C++ half of a
   boundary on its own.
 - Warnings are errors-adjacent: everything builds with `-Wall -Wextra -Wpedantic`.
-- Settings live behind `AppSettings` — including the pet window position. Never reach
-  for a bare `QSettings()`; that bypasses the injected store and makes tests write to
-  real macOS preference domains.
+- Settings live behind `AppSettings` — including the pet window position and the
+  settings window geometry. Never reach for a bare `QSettings()`; that bypasses the
+  injected store and makes tests write to real macOS preference domains.
+- Colors, metrics, and fonts live in `Theme`. Do not call `setStyleSheet` outside
+  `Theme::styleSheet()`, and do not add a QSS rule that matches `PetPreviewWidget` —
+  a match makes `QStyleSheetStyle` set `WA_StyledBackground` on it, which paints a
+  background before `paintEvent` and silently undoes its opaque-paint optimization.
+- Prefer a distinct type over a `bool` for a new flag parameter next to existing
+  numeric ones (see `PetGesture::DragLock`). Adding `bool` there compiled silently
+  and reinterpreted every existing call, because `int` converts to `bool` without a
+  warning.

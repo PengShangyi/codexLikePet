@@ -10,6 +10,11 @@ scoped Objective-C++ adapters for macOS-only services.
 - Dragging, left/right/bottom snapping, contextual animation, click reactions,
   local season/day variants, reduced motion, and optional activity-only typing
   detection.
+- Scale, animation speed, and window opacity are user-adjustable; opacity never
+  reaches zero, because a fully transparent pet cannot be clicked or found again.
+- An optional position lock suppresses dragging only. Clicks, click reactions, and
+  the context menu keep working, so it is not click-through — which stays out of
+  scope below.
 - Codex v2 pet atlases remain the base resource contract. Potato extensions live
   beside, rather than inside, the compatible manifest and atlas.
 - No task monitoring, telemetry, online quote provider, weather, location,
@@ -54,6 +59,12 @@ scoped Objective-C++ adapters for macOS-only services.
   may be restated at a second call site.
 - `InputActivitySource`, `SystemActivitySource`, `LoginItemController`, and
   `QuoteProvider` are replaceable boundaries with deterministic test doubles.
+- `Theme` is the sole authority for colors, metrics, and fonts, and generates the
+  only stylesheet in the application. It defines both light and dark schemes
+  outright rather than reading `QGuiApplication::palette()`, because
+  `QStyleHints::colorSchemeChanged` is emitted before Qt swaps that palette.
+  Renderers (`PetPreviewWidget`, `SpeechBubble`) receive an already-resolved
+  `Qt::ColorScheme` and never observe the system appearance themselves.
 
 The application decodes resources lazily, retains at most two atlas cache
 entries and a bounded clip cache, clears extension clips on environment or pet
