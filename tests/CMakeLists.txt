@@ -202,3 +202,14 @@ qt_add_executable(potato_login_item_test
 target_include_directories(potato_login_item_test PRIVATE ../src)
 target_link_libraries(potato_login_item_test PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME potato_login_item_test COMMAND potato_login_item_test)
+
+qt_add_executable(potato_pet_gesture_test
+    test_pet_gesture.cpp
+    ../src/pet/PetGesture.cpp
+    ../src/pet/PetGesture.h
+    ../src/pet/WindowPlacement.cpp
+    ../src/pet/WindowPlacement.h
+)
+target_include_directories(potato_pet_gesture_test PRIVATE ../src)
+target_link_libraries(potato_pet_gesture_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME potato_pet_gesture_test COMMAND potato_pet_gesture_test)

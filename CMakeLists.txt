@@ -103,6 +103,8 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/login/MacLoginItemController.mm
     src/pet/WindowPlacement.cpp
     src/pet/WindowPlacement.h
+    src/pet/PetGesture.cpp
+    src/pet/PetGesture.h
     src/platform/MacApplication.h
     src/platform/MacApplication.mm
 )

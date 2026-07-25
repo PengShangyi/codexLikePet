@@ -1,5 +1,6 @@
 #include "pet/PetWindow.h"
 
+#include "pet/PetGesture.h"
 #include "pet/WindowPlacement.h"
 #include "settings/AppSettings.h"
 
@@ -198,15 +199,16 @@ void PetWindow::mouseMoveEvent(QMouseEvent *event)
     }
     const QPoint global = event->globalPosition().toPoint();
     const QPoint totalDelta = global - m_pressGlobal;
-    if (!m_dragging && WindowPlacement::exceedsDragThreshold(totalDelta, 4)) {
+    const PetGesture::MoveDecision decision =
+        PetGesture::onMove(m_dragging, totalDelta, global.x() - m_lastGlobal.x(), 4);
+    if (decision.startDrag) {
         m_dragging = true;
         updateSnapEdge(SnapEdge::None);
         setCursor(Qt::ClosedHandCursor);
         emit dragStarted();
     }
     if (m_dragging) {
-        const HorizontalDragDirection direction = WindowPlacement::horizontalDirectionForDelta(global.x() - m_lastGlobal.x());
-        if (direction != HorizontalDragDirection::None) emit dragDirectionChanged(direction);
+        if (decision.direction != HorizontalDragDirection::None) emit dragDirectionChanged(decision.direction);
         move(WindowPlacement::clampToAvailableGeometry(m_pressWindow + totalDelta,
                                                         size(),
                                                         primaryAvailableGeometry()));
@@ -223,15 +225,16 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event)
     }
     m_pointerDown = false;
     setCursor(Qt::OpenHandCursor);
-    if (m_dragging) {
-        const QRect available = primaryAvailableGeometry();
-        updateSnapEdge(WindowPlacement::resolveSnapEdge(pos(), size(), available, 24));
-        move(WindowPlacement::snappedPosition(m_snapEdge, pos(), size(), available));
+    const PetGesture::ReleaseDecision decision =
+        PetGesture::onRelease(m_dragging, pos(), size(), primaryAvailableGeometry(), 24);
+    if (decision.wasClick) {
+        emit clicked();
+    } else {
+        updateSnapEdge(decision.snapEdge);
+        move(decision.snappedTopLeft);
         m_dragging = false;
         QSettings().setValue(QStringLiteral("window/position"), pos());
         emit dragFinished(m_snapEdge);
-    } else {
-        emit clicked();
     }
     event->accept();
 }
