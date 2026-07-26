@@ -9,8 +9,11 @@ class WindowPlacementTest final : public QObject
 private slots:
     void defaultsToBottomRightWithMargin()
     {
-        QCOMPARE(WindowPlacement::defaultPosition(QRect(0, 25, 1440, 875), QSize(192, 208), 24),
-                 QPoint(1224, 668));
+        // 96x104 is the pet's real size at scale 1.0 (PetWindow::BaseWidth); the
+        // arithmetic is size-agnostic, but a literal that no longer matches any pet
+        // reads as a coincidence rather than a case.
+        QCOMPARE(WindowPlacement::defaultPosition(QRect(0, 25, 1440, 875), QSize(96, 104), 24),
+                 QPoint(1320, 772));
     }
 
     void clampsEveryEdge()

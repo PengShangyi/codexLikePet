@@ -7,7 +7,8 @@ class PetGestureTest final : public QObject
 {
     Q_OBJECT
 
-    static constexpr QSize kPetSize{192, 208};
+    // The pet's size at scale 1.0; see PetWindow::BaseWidth/BaseHeight.
+    static constexpr QSize kPetSize{96, 104};
     static const QRect kAvailable;
 
 private slots:

@@ -17,14 +17,26 @@ class PetWindow final : public QWidget
     Q_OBJECT
 
 public:
-    static constexpr int CellWidth = 192;
-    static constexpr int CellHeight = 208;
+    // The pet's size at scale 1.0, in *logical points* -- not the atlas cell size,
+    // which is PetAtlas::CellWidth/CellHeight and is measured in source pixels.
+    // These used to be a second copy of 192x208, so the two meanings coincided by
+    // accident; they are half of it now, deliberately, because the pet runs on
+    // Retina displays where devicePixelRatio is 2. That makes the backing store
+    // exactly 192x208 device pixels at scale 1.0, so a frame is presented at its
+    // authored size and ensureScaledFrame() has nothing to resample. See its
+    // comment for what that is worth and where it stops being true.
+    static constexpr int BaseWidth = 96;
+    static constexpr int BaseHeight = 104;
 
     explicit PetWindow(AppSettings *settings, QWidget *parent = nullptr);
 
     SnapEdge snapEdge() const;
     void setFrame(const QImage &frame);
     void setSmoothRendering(bool smooth);
+    // Exposed for tests: the device-pixel size the current frame is presented at.
+    // The no-resample path is invisible from the outside otherwise, and the
+    // offscreen platform tests run at devicePixelRatio 1 where it never engages.
+    QSize scaledFrameSize() const;
 
 public slots:
     void setScaleFactor(double factor);

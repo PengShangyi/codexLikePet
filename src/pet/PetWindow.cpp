@@ -88,11 +88,35 @@ void PetWindow::ensureScaledFrame()
     if (m_scaled.size() == deviceSize && qFuzzyCompare(m_scaled.devicePixelRatio(), dpr)) {
         return;
     }
-    m_scaled = QPixmap::fromImage(m_frame.scaled(deviceSize,
-                                                 Qt::IgnoreAspectRatio,
-                                                 m_smoothRendering ? Qt::SmoothTransformation
-                                                                   : Qt::FastTransformation));
+    if (m_frame.size() == deviceSize) {
+        // The frame is already the size we need, which is the point of BaseWidth /
+        // BaseHeight: at scale 1.0 on a devicePixelRatio-2 display the backing store
+        // is exactly the atlas cell. Measured end to end, taking this path instead
+        // of resampling is the difference between 1.10% and 0.70% idle CPU -- the
+        // single largest saving available here, and the frame stops being blurry.
+        //
+        // QImage::scaled() happens to return *this when the size already matches, so
+        // this branch is not what makes it cheap; it is here so the property is
+        // stated rather than inherited from an undocumented shortcut, and so the
+        // fast path is visible to a test.
+        //
+        // Where it stops holding: a devicePixelRatio-1 display asks for 96x104 and
+        // this downsamples a 192x208 cell instead, which is more work than the old
+        // base did there (it matched 1:1 at ratio 1). The contract is primary
+        // display only and the target hardware is Retina, so that is the trade.
+        m_scaled = QPixmap::fromImage(m_frame);
+    } else {
+        m_scaled = QPixmap::fromImage(m_frame.scaled(deviceSize,
+                                                     Qt::IgnoreAspectRatio,
+                                                     m_smoothRendering ? Qt::SmoothTransformation
+                                                                       : Qt::FastTransformation));
+    }
     m_scaled.setDevicePixelRatio(dpr);
+}
+
+QSize PetWindow::scaledFrameSize() const
+{
+    return m_scaled.size();
 }
 
 void PetWindow::setScaleFactor(double factor)
@@ -223,6 +247,14 @@ void PetWindow::paintEvent(QPaintEvent *)
         // rescale the cell on every repaint, and SmoothPixmapTransform now lives
         // in ensureScaledFrame's transformation mode instead.
         ensureScaledFrame();
+        // SourceOver, the default, is deliberate. m_scaled covers the whole backing
+        // store and nothing else paints, so CompositionMode_Source is legal here and
+        // is 3-5x cheaper per blit in isolation -- but measured end to end it made no
+        // difference at all: three runs each way at maximum scale and speed gave
+        // 2.70/2.70/2.70 against 2.60/2.60/2.80 percent idle CPU. At 5.5fps the blit
+        // is a fraction of a millisecond per second either way, an order of magnitude
+        // under what the acceptance check can resolve. Not worth having a mode that
+        // writes destination alpha verbatim on this path for an unmeasurable saving.
         painter.drawPixmap(0, 0, m_scaled);
         return;
     }
@@ -340,5 +372,5 @@ QRect PetWindow::primaryAvailableGeometry() const
 
 void PetWindow::updateWindowSize()
 {
-    resize(qRound(CellWidth * m_scaleFactor), qRound(CellHeight * m_scaleFactor));
+    resize(qRound(BaseWidth * m_scaleFactor), qRound(BaseHeight * m_scaleFactor));
 }

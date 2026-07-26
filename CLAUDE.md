@@ -242,6 +242,16 @@ is never installed into `~/.codex`.
   Reverting a hot path to `frame()` is a regression, not a simplification.
 - Atlases and clips are stored `ARGB32_Premultiplied`, the raster engine's native
   format. Storing anything else means `drawImage` converts on every paint.
-- `PetWindow` caches the current frame pre-scaled to the window. Any new input to that
+- `PetWindow` caches the current frame scaled to the window. Any new input to that
   scale — a new frame, a different filter — must invalidate `m_scaled`, or the pet
   freezes on one image while everything else reports that it is animating.
+- **The pet's logical size is half the atlas cell**, so at `devicePixelRatio` 2 the
+  backing store *is* the cell and `ensureScaledFrame()` presents the frame with no
+  resampling at all. `PetWindow::BaseWidth/BaseHeight` (96x104 logical points) and
+  `PetAtlas::CellWidth/CellHeight` (192x208 source pixels) mean different things and
+  must not be conflated — they used to be equal, which made the difference invisible.
+  Changing either breaks the fast path, so `theBaseSizeIsOneAtlasCellAtRetinaScale`
+  pins the relation. Measured, this is 0.6% idle CPU against 1.15% for the resampling
+  path, and it is also the difference between a sharp pet and a blurry one. On that
+  path `m_scaled` shares the atlas buffer rather than owning a copy, so it keeps the
+  whole 13.4 MB atlas alive for as long as it is the current frame.

@@ -12,6 +12,11 @@ scoped Objective-C++ adapters for macOS-only services.
   detection.
 - Scale, animation speed, and window opacity are user-adjustable; opacity never
   reaches zero, because a fully transparent pet cannot be clicked or found again.
+- The pet is 96x104 logical points at scale 1.0, so on the Retina displays it
+  targets a frame is presented at the size it was authored — 192x208 device
+  pixels, one atlas cell, resampled by nothing. Scale reaches 192x208 points at
+  its maximum, which was the previous default and the largest the artwork
+  supports without being enlarged.
 - An optional position lock suppresses dragging only. Clicks, click reactions, and
   the context menu keep working, so it is not click-through — which stays out of
   scope below.

@@ -74,10 +74,11 @@ The workspace's public-Qt compatibility acceptance produced the ignored local
 artifact `dist/Potato.app` with source-built Qt 6.8.4. All 15 test executables
 passed; the deployed bundle contains 21 arm64-only Mach-O files with a maximum
 declared minimum OS of 12.0, a valid ad-hoc signature, WebP support, and no
-development library paths. The runtime probe measured 1.42% idle CPU, 114944
-KiB peak resident memory, and zero network sockets on the current Apple Silicon
-development Mac. This validates local development, not the licensed Qt 6.8.8
-release gate or the later required macOS 12 compatibility-machine check.
+development library paths. The runtime probe measured 1.1% idle CPU and 45.9 MiB
+peak physical footprint on the shipped defaults, 5.3% and 48.6 MiB with both
+appearance sliders at maximum, and zero network sockets on the current Apple
+Silicon development Mac. This validates local development, not the licensed Qt
+6.8.8 release gate or the later required macOS 12 compatibility-machine check.
 
 ## Privacy
 

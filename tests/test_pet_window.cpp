@@ -1,3 +1,4 @@
+#include "pet/PetAtlas.h"
 #include "pet/PetWindow.h"
 #include "settings/AppSettings.h"
 
@@ -22,10 +23,21 @@ class PetWindowRenderTest final : public QObject
         return canvas;
     }
 
+    // A frame is an atlas cell, so it is sized in source pixels. This used to read
+    // PetWindow::CellWidth, which worked only because the window's logical size
+    // happened to equal the cell; taking the size from PetAtlas keeps these tests
+    // feeding real frame geometry now that the two differ.
     static QImage solidFrame(const QColor &color)
     {
-        QImage frame(PetWindow::CellWidth, PetWindow::CellHeight,
+        QImage frame(PetAtlas::CellWidth, PetAtlas::CellHeight,
                      QImage::Format_ARGB32_Premultiplied);
+        frame.fill(color);
+        return frame;
+    }
+
+    static QImage solidFrameOfSize(const QSize &size, const QColor &color)
+    {
+        QImage frame(size, QImage::Format_ARGB32_Premultiplied);
         frame.fill(color);
         return frame;
     }
@@ -91,6 +103,38 @@ private slots:
         // being blitted at its old size into a bigger window.
         QCOMPARE(painted.pixelColor(1, 1), QColor(120, 130, 140));
         QCOMPARE(painted.pixelColor(pet.width() - 2, pet.height() - 2), QColor(120, 130, 140));
+    }
+
+    // The invariant the whole no-resample path rests on. Stated as arithmetic
+    // because the offscreen platform these tests run under reports
+    // devicePixelRatio 1, so the real Retina geometry cannot be observed here --
+    // but if either constant moves, the pet starts being resampled every frame
+    // again and only a profiler would say so.
+    void theBaseSizeIsOneAtlasCellAtRetinaScale()
+    {
+        QCOMPARE(PetWindow::BaseWidth * 2, PetAtlas::CellWidth);
+        QCOMPARE(PetWindow::BaseHeight * 2, PetAtlas::CellHeight);
+    }
+
+    // Exercises both branches of ensureScaledFrame() at whatever ratio the platform
+    // gives us: a frame already the size of the backing store must be presented
+    // as-is, and one that is not must come out at the backing store's size anyway.
+    void aFrameMatchingTheBackingStoreIsPresentedUnscaled()
+    {
+        QTemporaryDir dir;
+        AppSettings settings(dir.filePath(QStringLiteral("settings.ini")));
+        PetWindow pet(&settings);
+        const QSize deviceSize = pet.size() * pet.devicePixelRatioF();
+
+        pet.setFrame(solidFrameOfSize(deviceSize, QColor(11, 22, 33)));
+        QCOMPARE(renderPet(pet).pixelColor(1, 1), QColor(11, 22, 33));
+        QCOMPARE(pet.scaledFrameSize(), deviceSize);
+
+        // A cell-sized frame is the other branch unless the ratio happens to make
+        // them equal; either way the presented pixmap tracks the backing store.
+        pet.setFrame(solidFrame(QColor(44, 55, 66)));
+        QCOMPARE(renderPet(pet).pixelColor(1, 1), QColor(44, 55, 66));
+        QCOMPARE(pet.scaledFrameSize(), deviceSize);
     }
 
     // With no validated frame there is still a pet to look at: the drawn fallback.

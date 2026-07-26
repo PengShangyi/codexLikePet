@@ -30,6 +30,13 @@ AppSettings::AppSettings(QObject *parent)
     : QObject(parent)
     , m_settings(std::make_unique<QSettings>())
 {
+    // Reads must see Potato's own domain and nothing else. With fallbacks on --
+    // the default -- the native macOS backend also searches the organisation
+    // domain and kCFPreferencesAnyApplication (NSGlobalDomain), so allKeys() and
+    // contains() answer for AppleLanguages, AppleLocale and the rest of the
+    // user's global preferences. Nothing here wants that, and migrate() was
+    // actively broken by it.
+    m_settings->setFallbacksEnabled(false);
     migrate();
 }
 
@@ -37,6 +44,9 @@ AppSettings::AppSettings(const QString &iniFilePath, QObject *parent)
     : QObject(parent)
     , m_settings(std::make_unique<QSettings>(iniFilePath, QSettings::IniFormat))
 {
+    // No effect for an explicit ini path, which has exactly one file; set anyway
+    // so both constructors leave the store in the same state.
+    m_settings->setFallbacksEnabled(false);
     migrate();
 }
 
@@ -245,22 +255,33 @@ void AppSettings::setOnboardingCompleted(bool value)
 
 void AppSettings::migrate()
 {
-    constexpr int currentSchemaVersion = 2;
+    constexpr int currentSchemaVersion = 3;
     const int storedVersion = m_settings->value(QStringLiteral("meta/schemaVersion"), 0).toInt();
     if (storedVersion >= currentSchemaVersion) return;
 
-    // Any existing key means this profile predates the current schema, i.e. the
-    // user has run Potato before and should not be shown the first-run welcome.
-    const bool existingProfile = !m_settings->allKeys().isEmpty();
+    const QVector<QPair<QString, QString>> legacyKeys = {
+        {QStringLiteral("scale"), QStringLiteral("appearance/scale")},
+        {QStringLiteral("animationSpeed"), QStringLiteral("appearance/animationSpeed")},
+        {QStringLiteral("alwaysOnTop"), QStringLiteral("appearance/alwaysOnTop")},
+        {QStringLiteral("launchAtLogin"), QStringLiteral("system/launchAtLogin")},
+        {QStringLiteral("typingDetectionEnabled"), QStringLiteral("privacy/typingDetection")},
+    };
+
+    // Has Potato itself written this profile before? Deliberately not
+    // allKeys().isEmpty(): that also counts foreign keys, and on the native macOS
+    // backend it is never empty, so every first-run user was misread as an
+    // upgrader and never saw the welcome window. The constructors disable
+    // fallbacks, but this must not depend on that -- it asks for Potato's keys
+    // specifically. Every key we store is grouped, so any group at all is ours;
+    // the pre-schema profiles that have no group are caught by the legacy list.
+    const bool existingProfile = storedVersion > 0
+        || !m_settings->childGroups().isEmpty()
+        || std::any_of(legacyKeys.cbegin(), legacyKeys.cend(),
+                       [this](const QPair<QString, QString> &keys) {
+                           return m_settings->contains(keys.first);
+                       });
 
     if (storedVersion < 1) {
-        const QVector<QPair<QString, QString>> legacyKeys = {
-            {QStringLiteral("scale"), QStringLiteral("appearance/scale")},
-            {QStringLiteral("animationSpeed"), QStringLiteral("appearance/animationSpeed")},
-            {QStringLiteral("alwaysOnTop"), QStringLiteral("appearance/alwaysOnTop")},
-            {QStringLiteral("launchAtLogin"), QStringLiteral("system/launchAtLogin")},
-            {QStringLiteral("typingDetectionEnabled"), QStringLiteral("privacy/typingDetection")},
-        };
         for (const auto &[legacy, current] : legacyKeys) {
             if (m_settings->contains(legacy) && !m_settings->contains(current)) {
                 m_settings->setValue(current, m_settings->value(legacy));
@@ -268,6 +289,30 @@ void AppSettings::migrate()
             m_settings->remove(legacy);
         }
     }
+    // PetWindow's base render size was halved, so that at scale 1.0 on a Retina
+    // display a frame lands on the backing store at its authored size. Scale is a
+    // multiplier of that base, so doubling a stored value leaves an existing pet
+    // exactly the size it already was.
+    //
+    // Runs after the block above, which may have just moved a pre-schema top-level
+    // `scale` into appearance/scale -- the doubling has to see the moved value.
+    //
+    // Written even when the key is absent, which is the case that matters most:
+    // absent meant the old default of 1.0 against the old base, so leaving it
+    // absent would halve the pet of every user who never touched the slider. A
+    // fresh profile is not an existingProfile and never reaches this, which is how
+    // it gets the new default -- so this depends on that check being right.
+    if (storedVersion < 3 && existingProfile) {
+        const QString scaleKey = QStringLiteral("appearance/scale");
+        const double previous =
+            boundedSetting(m_settings->value(scaleKey, 1.0), 1.0, factorMinimum, factorMaximum);
+        // A previously oversized pet cannot be represented against the new base and
+        // clamps to the maximum, which is the old default size. Deliberate: the old
+        // maximum was 384x416 logical points, a quarter of the width of a laptop
+        // display, and measured over the 2% idle CPU limit.
+        m_settings->setValue(scaleKey, std::clamp(previous * 2.0, factorMinimum, factorMaximum));
+    }
+
     // Suppress the first-run welcome for upgraders; only a genuinely fresh
     // profile leaves onboarding/welcomeShown at its false default.
     if (existingProfile && !m_settings->contains(QStringLiteral("onboarding/welcomeShown"))) {
