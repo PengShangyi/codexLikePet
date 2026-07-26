@@ -20,20 +20,56 @@ memory — key values must never reach models, logs, settings, tests, or files.
 
 ```sh
 cmake -S . -B build -DPOTATO_BUILD_TESTS=ON   # tests ON by default
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --build build -j 10
+cmake --build build --target check             # ctest across the cores; ~4s
 open -n build/Potato.app                       # local dev app
 ```
 
-Run one test by CTest name (each test target is a separate executable):
+Pass an explicit `-j <n>`. `cmake --build -j` with no number means *unlimited*
+jobs under Make, which oversubscribes the machine badly enough to make a clean
+build several times slower and to make timings meaningless.
+
+`CMAKE_BUILD_TYPE` defaults to `RelWithDebInfo` when you do not choose one, so a
+dev build is worth profiling. Release stays the packaging path.
+
+Run one test by CTest name:
 
 ```sh
 ctest --test-dir build -R potato_behavior_test --output-on-failure
-./build/tests/potato_behavior_test             # or run the binary directly
+```
+
+Most test classes share a binary with the others in their link group, so the
+CTest name and the executable name are not the same thing. To run one class
+directly, name it:
+
+```sh
+./build/tests/potato_core_test --class SettingsTest   # one class
+./build/tests/potato_core_test                        # every class in the binary
 ```
 
 Set `POTATO_QT_ROOT` if Qt is not on the default CMake prefix path. Builds are
 arm64-only and out-of-source; generated files are never committed.
+
+## Memory lifetime
+
+Two gates, because neither covers the other half:
+
+```sh
+cmake -S . -B build-asan -DPOTATO_SANITIZE=ON && ctest --test-dir build-asan
+scripts/check-leaks.sh                          # must stay at zero
+```
+
+`POTATO_SANITIZE=ON` builds with ASan and UBSan and catches use-after-free — the
+failure mode for the frame views described under Conventions. Note its reach:
+Qt is a prebuilt uninstrumented framework, so a dangling read performed *inside*
+`QImage::pixelColor` is invisible to it. A lifetime test has to touch the buffer
+from our own code to be checked.
+
+`scripts/check-leaks.sh` drives the platform's `leaks(1)`, because LeakSanitizer
+is not supported on Darwin/arm64. Every binary records zero in
+`scripts/leak-baseline.txt`; a non-zero entry needs a reason in the commit that
+introduces it. Do not run it against a sanitizer build — ASan replaces the
+allocator it inspects, and the script refuses.
 
 ## Release packaging (requires licensed Qt 6.8.8)
 
@@ -51,6 +87,14 @@ newer Qt 6 is fine but is **not** the release artifact.
 `AppController` (`src/app/`) owns the application lifecycle and is the single wiring
 point: it constructs and connects otherwise-isolated services, the tray menu, and the
 pet window. Platform adapters never own settings or pet resources — they are injected.
+
+The settings, about, and welcome windows are built on **first use**, not at startup;
+most sessions never open any of them. `SettingsViewState` (`src/app/`) absorbs the
+state `AppController` pushes at the settings window in the meantime and replays it on
+attach, so the call sites stay free of null checks. It deliberately records no image
+handles — a proxy that cached a preview atlas would pin 14 MB to avoid building some
+widgets, which is the point inverted — so `settingsWindow()` re-pushes those from the
+package and atlas the controller already owns.
 
 The design centers on **single-authority services** with injectable boundaries so each
 has a deterministic test double. Rendering code receives already-resolved state and
@@ -99,17 +143,25 @@ Runtime resource discipline (enforced by design): decode lazily, retain at most 
 atlas cache entries (`AtlasCache`) and a bounded clip cache (`ClipCache`), clear
 extension clips on environment/pet change, stop pet/environment/input timers while
 hidden or asleep, recompute primary-screen placement (`WindowPlacement`) after display
-change and wake.
+change and wake, build the settings/about/welcome windows only when asked for, and hand
+out frames as views rather than copies (see Conventions).
 
 **Validation depth.** Decoding every atlas and clip is the entire cost of package
-validation (~400 ms for the built-in pet, versus ~3 ms without). It runs at the trust
-boundary only — `PetPackageImporter` and `PetStore`'s post-copy recheck use
-`ValidationDepth::Full`; `PetLibrary` lists installed pets with
+validation: for the built-in pet, 23 ms per atlas against 0.18 ms for the occupancy
+scan that follows one. It runs at the trust boundary only — `PetPackageImporter` and
+`PetStore`'s post-copy recheck use `ValidationDepth::Full`; `PetLibrary` lists with
 `ValidationDepth::Metadata`. Both depths enforce every *safety* rule (directory
 envelope, symlinks, executable bits, path safety, unreferenced files, clip geometry
 from image headers); Full adds only the pixel-level checks. Anything that slips past
 listing still surfaces at load through `PetAtlas`/`AnimationClip::load`. Do not move
 deep validation back onto the launch path.
+
+Those pixel checks are *recorded* by the sequential walk and dispatched together at the
+end, on a local `QThreadPool` — the files are independent and read-only, and import
+pays for the whole set twice (source, then the post-copy recheck). Issues are appended
+in walk order, not completion order, so which decode finishes first cannot change the
+report. Whether a check runs at all is structural: the walk is handed a sink to record
+into, and at `Metadata` depth there is nowhere to put a decode job.
 
 ## Pet resource contract
 
@@ -130,17 +182,31 @@ is never installed into `~/.codex`.
 - Every service that touches a system boundary has a pure-C++ interface header plus a
   `Mac*` implementation, so tests link the logic without the system dependency. Follow
   this pattern when adding new platform integration.
-- Each test in `tests/CMakeLists.txt` is its own `qt_add_executable` linking only what
-  it exercises — add new tests the same way rather than into a shared binary. Low-level
-  modules come from the shared static libraries declared in the root `CMakeLists.txt`
+- Test *binaries* are grouped by link set; test *entries* are not. Classes sharing a
+  link set share an executable (`potato_core_test`, `potato_geometry_test`,
+  `potato_ui_test`, `potato_package_test`, `potato_animation_test`), but each keeps its
+  own CTest entry dispatched with `--class`, so filtering and `ctest -j` parallelism are
+  per class. A new test joins the group whose link set it already needs: define the
+  class in its own file, end it with a `QObject *create<Class>()` factory instead of
+  `QTEST_MAIN`, and register it in the group's `tests/groups/*_main.cpp` and its
+  `potato_add_grouped_tests` list. Only give a test its own binary when it needs
+  something no group has — `potato_pet_overlay_test` is separate because it must *not*
+  run offscreen.
+- Low-level modules come from the shared static libraries in the root `CMakeLists.txt`
   (`potato_settings_core`, `potato_theme`, `potato_ui`, `potato_environment`,
   `potato_geometry`, `potato_atlas`, `potato_policy`, `potato_package`,
-  `potato_overlay`); link those instead of relisting their sources, and list any
-  other source directly. `potato_theme` is Gui-only so the tray icon, the pet's
+  `potato_overlay`, `potato_app`); link those instead of relisting their sources, and
+  list any other source directly. `potato_theme` is Gui-only so the tray icon, the pet's
   fallback drawing, and the speech bubble can share the brand palette without
-  acquiring a Widgets and `Localization` dependency; `potato_ui` adds the widgets. Modules that pull in a system
-  framework stay out of the libraries so a test can still link the pure C++ half of a
-  boundary on its own.
+  acquiring a Widgets and `Localization` dependency; `potato_ui` adds the widgets.
+  Modules that pull in a system framework stay out of the libraries so a test can still
+  link the pure C++ half of a boundary on its own. `potato_app` is the one exception —
+  it is the whole application layer including the `.mm` adapters, and it exists because
+  `Potato` and `potato_app_controller_test` were compiling the same thirty sources
+  twice. Those two are its only consumers; do not link it from a narrower test.
+- Precompiled headers come in three tiers (`POTATO_PCH_CORE` / `_GUI` / `_WIDGETS`).
+  Take the narrowest one a target can: handing `potato_theme` a Widgets header to
+  precompile would give it a Widgets include path and dissolve the boundary above.
 - Warnings are errors-adjacent: everything builds with `-Wall -Wextra -Wpedantic`.
 - Settings live behind `AppSettings` — including the pet window position and the
   settings window geometry. Never reach for a bare `QSettings()`; that bypasses the
@@ -153,3 +219,18 @@ is never installed into `~/.codex`.
   numeric ones (see `PetGesture::DragLock`). Adding `bool` there compiled silently
   and reinterpreted every existing call, because `int` converts to `bool` without a
   warning.
+- **Ownership.** QObjects use Qt parent/child; `std::unique_ptr` owns the top-level
+  windows and the non-QObject services; `QSharedPointer` owns decoded atlases and
+  clips, which are shared between the caches, the player, and the preview. There is
+  no bare `delete` in the codebase and no reason to add one.
+- **Frames are views, not copies.** Anything that runs per animation frame — or worse,
+  per paint — takes `PetAtlas::frameView()` / `AnimationClip::frameView()`, which point
+  into the owner's pixels. `frame()` still copies 156KB and is for callers that need an
+  independent image. A view keeps its own pixels alive (it retains the owning `QImage`),
+  so it survives cache eviction; writing to one detaches and gives the allocation back.
+  Reverting a hot path to `frame()` is a regression, not a simplification.
+- Atlases and clips are stored `ARGB32_Premultiplied`, the raster engine's native
+  format. Storing anything else means `drawImage` converts on every paint.
+- `PetWindow` caches the current frame pre-scaled to the window. Any new input to that
+  scale — a new frame, a different filter — must invalidate `m_scaled`, or the pet
+  freezes on one image while everything else reports that it is animating.

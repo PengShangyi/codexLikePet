@@ -71,12 +71,22 @@ entries and a bounded clip cache, clears extension clips on environment or pet
 changes, stops pet, environment, and input timers while hidden or asleep, and
 recomputes primary screen placement after display changes and wake.
 
+The settings, about, and welcome windows are constructed on first use rather than
+at startup, since most sessions never open any of them.
+
+Animation frames are handed to the pet window and the settings preview as views
+over the decoded atlas rather than copies of a cell, so playing an animation
+allocates nothing per frame. A view keeps the pixels it points at alive, so it
+remains valid after its atlas is evicted from the cache.
+
 Pixel-level package validation happens at the trust boundary — import, and the
 recheck of the staged copy — never on the launch path. Listing installed pets
 uses the metadata depth, which still enforces every safety rule (directory
 envelope, symbolic links, executable bits, path safety, unreferenced files, clip
 geometry read from image headers) and omits only the decode. A resource that
-fails to decode is reported when it is loaded.
+fails to decode is reported when it is loaded. The decodes within one Full
+validation run concurrently, and their findings are reported in package order so
+the result does not depend on thread scheduling.
 
 ## Persistent locations
 
