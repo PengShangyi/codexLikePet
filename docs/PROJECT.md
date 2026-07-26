@@ -90,7 +90,10 @@ the result does not depend on thread scheduling.
 
 ## Persistent locations
 
-- Preferences: native `QSettings` domain for `com.peng.Potato`.
+- Preferences: native `QSettings` domain `com.com-peng.Potato`. The organization
+  domain is `com.peng`, which is already reverse-DNS, so Qt's macOS backend
+  transforms it a second time; tooling that names the domain must use the
+  transformed spelling, and keys are flattened from `group/key` to `group.key`.
 - Imported pets: `~/Library/Application Support/Potato/Pets`.
 - Login state: Apple Service Management only; no custom LaunchAgent.
 - Repository-local tools: `.tools/` (ignored).

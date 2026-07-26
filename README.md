@@ -59,9 +59,14 @@ After packaging, verify the idle resource limits and network boundary with:
 scripts/check-runtime.sh /absolute/path/to/Potato.app
 ```
 
-The check fails at 2% CPU, 160 MiB resident memory, or any open network socket.
-It uses and removes a dedicated runtime-check preference/data profile, and does
-not inspect local pets or modify the user's launch-at-login registration.
+It runs two phases — shipped defaults, and both appearance sliders at maximum —
+and fails at 2% idle CPU on the defaults, 64 MiB peak physical footprint, or any
+open network socket. CPU is a delta over a fixed window rather than `ps -o %cpu`,
+which is a lifetime average and so flatters any build the longer it runs.
+Footprint rather than resident size, because most of the reported RSS is Qt
+framework text shared with every other Qt process. It uses and removes a
+dedicated runtime-check preference/data profile, and does not inspect local pets
+or modify the user's launch-at-login registration.
 DMG creation, Developer ID signing, and notarization remain a later release
 phase; the current deliverable is an ad-hoc-signed local `.app`.
 

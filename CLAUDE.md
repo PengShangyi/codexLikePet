@@ -79,8 +79,19 @@ licenses, ad-hoc signs, and verifies an arm64-only bundle. Configure with
 `-DPOTATO_REQUIRE_EXACT_QT=ON` to enforce the exact Qt pin. Local iteration with a
 newer Qt 6 is fine but is **not** the release artifact.
 
-`scripts/check-runtime.sh /abs/path/to/Potato.app` verifies idle limits — it fails at
-2% CPU, 160 MiB resident memory, or any open network socket.
+`scripts/check-runtime.sh /abs/path/to/Potato.app` verifies idle limits in two phases
+— shipped defaults, and both appearance sliders at maximum — and fails at 2% idle CPU
+on the defaults, 64 MiB peak physical footprint, or any open network socket.
+`package-local.sh` runs it against the packaged artifact.
+
+Two measurement traps it exists to avoid. CPU is a delta of `cputime` over a fixed
+window, never `ps -o %cpu`: that column is a decayed lifetime average, so a build
+scores better the longer you leave it running. Memory is peak *physical footprint*
+from `vmmap`, never RSS: roughly 50 MiB of the reported RSS is Qt framework text
+shared with every other Qt process, so RSS neither reflects what Potato costs nor
+moves when Potato's own allocations do. There is deliberately no idle-wakeup budget
+— `top`'s IDLEW only counts wakeups that revived an idle core, so it reads near zero
+on a busy machine even while the pet animates.
 
 ## Architecture
 

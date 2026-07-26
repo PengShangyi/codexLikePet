@@ -156,4 +156,11 @@ fi
 mkdir -p "$DIST_DIR"
 cmake -E remove_directory "$DIST_DIR/Potato.app"
 ditto "$APP" "$DIST_DIR/Potato.app"
+
+# The idle limits are an acceptance criterion, so check the artifact rather than
+# leaving it to whoever remembers to run the script by hand. It launches the bundle
+# through Launch Services in its own preferences domain, so it neither disturbs a
+# real profile nor changes launch-at-login.
+"$SCRIPT_DIR/check-runtime.sh" "$DIST_DIR/Potato.app"
+
 print "$DIST_DIR/Potato.app"
