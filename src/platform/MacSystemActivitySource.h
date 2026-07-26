@@ -15,5 +15,7 @@ public:
 private:
     void *m_sleepObserver = nullptr;
     void *m_wakeObserver = nullptr;
+    void *m_screensSleepObserver = nullptr;
+    void *m_screensWakeObserver = nullptr;
     void *m_accessibilityObserver = nullptr;
 };

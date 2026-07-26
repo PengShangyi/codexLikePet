@@ -24,6 +24,7 @@ EnvironmentResolver::EnvironmentResolver(AppSettings *settings,
 VariantKey EnvironmentResolver::current() const { return m_current; }
 void EnvironmentResolver::start() { reevaluate(); m_timer->start(); }
 void EnvironmentResolver::stop() { m_timer->stop(); }
+bool EnvironmentResolver::isRunning() const { return m_timer->isActive(); }
 
 void EnvironmentResolver::reevaluate()
 {

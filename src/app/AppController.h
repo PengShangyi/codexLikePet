@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QFlags>
 #include <QHash>
 #include <QSharedPointer>
 #include <QString>
@@ -84,9 +85,18 @@ public:
     void showAbout();
     void showWelcome();
     void presentStartupFailure();
+    // Puts the pet away or brings it back, as the tray item does. Public because it
+    // is a command like requestSettings(), and because hiding is the one quiet reason
+    // whose effect on the window and the tray label a test needs to be able to drive.
+    void setPetVisible(bool visible);
 
     // Exposed for tests: whether the idle-fidget scheduler is currently armed.
     bool isIdleFidgetArmed() const;
+    // Exposed for tests: whether the rollover poll is armed. Unlike the fidget
+    // scheduler, which recomputes from the quiet reasons every time it is asked, this
+    // is plain timer state -- so it is what catches the pet being resumed while it
+    // should still be quiet.
+    bool isEnvironmentPollRunning() const;
     // Exposed for tests: whether keystroke-driven typing presses are engaged
     // (a dedicated typing clip is loaded and motion is allowed).
     bool isTypingPressActive() const;
@@ -96,7 +106,6 @@ signals:
     void settingsRequested();
 
 private:
-    void setPetVisible(bool visible);
     void updateVisibilityAction();
     void updatePetMenu(const QString &selectedId);
     void refreshPetLibrary();
@@ -123,8 +132,39 @@ private:
     void loadPreviewClip(const QString &key);
     QSharedPointer<AnimationClip> loadClip(const QString &name);
     bool playClip(const QString &name, bool restart = true);
+    // Why the pet is not animating. More than one can hold at once -- hiding the pet
+    // and then letting the display sleep is two -- and it stays quiet until every one
+    // of them clears, which is what a single bool per reason kept getting wrong.
+    //
+    // Hidden is the only reason that touches window visibility or the tray item's
+    // label. When the display sleeps the pet has not gone anywhere, it just stops
+    // moving, so reporting that as hidden would offer a "Show Pet" item for a pet
+    // that is already shown and would hand QWidget::setVisible a window it must not
+    // touch.
+    enum class QuietReason {
+        Hidden = 0x1,
+        SystemAsleep = 0x2,
+        DisplayAsleep = 0x4,
+    };
+
+    void setQuiet(QuietReason reason, bool quiet);
+    bool isQuiet() const { return m_quietReasons != QFlags<QuietReason>(); }
+    bool isHidden() const { return m_quietReasons.testFlag(QuietReason::Hidden); }
+    // The two halves the quiet reasons share. Every reason stops the same seven
+    // things and resumes the same four; they used to be written out once per reason,
+    // byte for byte, which is why a third reason was worth factoring first.
+    void stopPetActivity();
+    void resumePetActivity();
+    // Wake recomputes placement and re-reads the environment whether or not the pet
+    // is still quiet for another reason: display geometry can change while a machine
+    // is asleep, and a rollover during a long sleep would otherwise wait for the next
+    // poll -- which never comes while the resolver is stopped.
+    void handleWake();
+
     void handleSystemSleep();
     void handleSystemWake();
+    void handleDisplayAsleep();
+    void handleDisplayAwake();
 
     QSystemTrayIcon *m_trayIcon;
     std::unique_ptr<QMenu> m_menu;
@@ -175,7 +215,6 @@ private:
     ThemeWatcher *m_bubbleTheme = nullptr;
     QTimer *m_clickCompletionTimer;
     bool m_suppressSystemMutations = false;
-    bool m_sleeping = false;
-    bool m_petVisible = true;
+    QFlags<QuietReason> m_quietReasons;
     QUuid m_activeQuoteRequest;
 };

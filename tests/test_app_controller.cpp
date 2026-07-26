@@ -19,6 +19,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -64,6 +65,8 @@ public:
     }
     void sleep() { emit willSleep(); }
     void wakeUp() { emit didWake(); }
+    void displaySleep() { emit screensDidSleep(); }
+    void displayWake() { emit screensDidWake(); }
 
 private:
     bool m_reduced = false;
@@ -350,6 +353,85 @@ private slots:
         QVERIFY(!controller.isIdleFidgetArmed()); // asleep disarms
         fx.system.wakeUp();
         QVERIFY(controller.isIdleFidgetArmed()); // re-armed on wake
+
+        fx.system.displaySleep();
+        QVERIFY(!controller.isIdleFidgetArmed()); // nothing on screen can be seen
+        fx.system.displayWake();
+        QVERIFY(controller.isIdleFidgetArmed());
+    }
+
+    // The reason a bool per quiet state was not enough. Two of them can hold at
+    // once, and clearing one must not resume the pet while the other still stands --
+    // the sequence that used to get this wrong is display-sleeps-then-wakes while the
+    // pet is hidden, which would have started animating a window the user had put
+    // away. Ordering matters both ways round, so both are exercised.
+    void quietReasonsCompose()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+        auto deps = fx.deps(&settings);
+        deps.idlePolicy.nextIntervalMs = [] { return 100000; };
+        deps.idlePolicy.nextAnimation = [] { return V2AnimationState::Jumping; };
+
+        AppController controller(deps, AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        QVERIFY(controller.isIdleFidgetArmed());
+
+        controller.setPetVisible(false);
+        QVERIFY(!controller.isIdleFidgetArmed());
+        fx.system.displaySleep();
+        QVERIFY(!controller.isIdleFidgetArmed());
+        fx.system.displayWake();
+        QVERIFY2(!controller.isIdleFidgetArmed(), "still hidden, so the display waking is not enough");
+        // The fidget gate recomputes from the reasons, so it would read correctly even
+        // if the pet had been resumed behind it. The rollover poll is plain timer
+        // state, so it is what shows whether anything actually restarted.
+        QVERIFY2(!controller.isEnvironmentPollRunning(),
+                 "the rollover poll restarted while the pet was still hidden");
+        controller.setPetVisible(true);
+        QVERIFY(controller.isIdleFidgetArmed());
+        QVERIFY(controller.isEnvironmentPollRunning());
+
+        // Other order: the display sleeps first, and showing the pet must not resume
+        // it either.
+        fx.system.displaySleep();
+        controller.setPetVisible(false);
+        controller.setPetVisible(true);
+        QVERIFY2(!controller.isIdleFidgetArmed(), "the display is still asleep");
+        QVERIFY2(!controller.isEnvironmentPollRunning(),
+                 "showing the pet restarted the poll while the display was asleep");
+        fx.system.displayWake();
+        QVERIFY(controller.isIdleFidgetArmed());
+        QVERIFY(controller.isEnvironmentPollRunning());
+    }
+
+    // Sleeping the display stops the pet moving; it does not put the pet away. If it
+    // reached the window, the pet would still be gone after the display woke, and the
+    // tray would offer to show a pet that had never been hidden.
+    void aSleepingDisplayNeitherHidesThePetNorRelabelsTheTray()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        QSignalSpy visibility(&controller, &AppController::petVisibilityRequested);
+
+        fx.system.displaySleep();
+        fx.system.wakeUp();
+        fx.system.sleep();
+        fx.system.displayWake();
+        QCOMPARE(visibility.count(), 0);
+
+        // ...whereas the tray toggle does reach it, exactly once per change.
+        controller.setPetVisible(false);
+        QCOMPARE(visibility.count(), 1);
+        QCOMPARE(visibility.last().first().toBool(), false);
+        controller.setPetVisible(true);
+        QCOMPARE(visibility.count(), 2);
+        QCOMPARE(visibility.last().first().toBool(), true);
     }
 
     // End-to-end typing wiring: a keystroke must move the pet out of Idle (into

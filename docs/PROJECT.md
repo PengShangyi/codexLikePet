@@ -73,8 +73,17 @@ scoped Objective-C++ adapters for macOS-only services.
 
 The application decodes resources lazily, retains at most two atlas cache
 entries and a bounded clip cache, clears extension clips on environment or pet
-changes, stops pet, environment, and input timers while hidden or asleep, and
-recomputes primary screen placement after display changes and wake.
+changes, stops pet, environment, and input timers while hidden, while the machine
+is asleep, or while the display is asleep, and recomputes primary screen
+placement after display changes and wake.
+
+Those three are reasons the pet is quiet, and more than one can hold at once, so
+the pet resumes only when the last of them clears. Hiding is the only one that
+touches the window or the tray item's label: a sleeping display has not put the
+pet away, and treating it as though it had would leave the pet hidden after the
+display woke. Display sleep is a distinct reason because neither system sleep
+notification fires for it, and on a machine left plugged in it accounts for most
+of the hours the process is running.
 
 The atlas capacity bounds how many atlases the cache indexes, not how many the
 process keeps: an entry nothing else references still occupies its slot, which

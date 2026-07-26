@@ -165,7 +165,7 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
         }
     });
     connect(m_quoteProvider, &QuoteProvider::quoteReady, this, [this](const QUuid &requestId, const Quote &quote) {
-        if (requestId != m_activeQuoteRequest || !m_petVisible || m_sleeping) return;
+        if (requestId != m_activeQuoteRequest || isQuiet()) return;
         if (QScreen *screen = QGuiApplication::primaryScreen()) {
             m_speechBubble->showMessage(quote.text, m_petWindow->geometry(), screen->availableGeometry(), 3000);
         }
@@ -215,6 +215,11 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
     });
     connect(m_systemActivity, &SystemActivitySource::willSleep, this, &AppController::handleSystemSleep);
     connect(m_systemActivity, &SystemActivitySource::didWake, this, &AppController::handleSystemWake);
+    // The display sleeping is its own quiet reason, not a variant of the machine
+    // sleeping: neither sleep notification fires for it, and on a laptop left plugged
+    // in it accounts for most of the hours the process is running.
+    connect(m_systemActivity, &SystemActivitySource::screensDidSleep, this, &AppController::handleDisplayAsleep);
+    connect(m_systemActivity, &SystemActivitySource::screensDidWake, this, &AppController::handleDisplayAwake);
     connect(m_loginItemCoordinator, &LoginItemCoordinator::updateFailed, this, [this](const QString &message) {
         m_notifier->warn(m_localization->text(TextKey::LoginItemErrorTitle), message);
     });
@@ -285,7 +290,7 @@ bool AppController::start()
 
     m_visibilityAction = m_menu->addAction(QString());
     connect(m_visibilityAction, &QAction::triggered, this, [this] {
-        setPetVisible(!m_petVisible);
+        setPetVisible(isHidden());
     });
     updateVisibilityAction();
 
@@ -341,9 +346,8 @@ bool AppController::start()
     return true;
 }
 
-void AppController::handleSystemSleep()
+void AppController::stopPetActivity()
 {
-    m_sleeping = true;
     m_animationPlayer->stop();
     m_environmentResolver->stop();
     m_inputSource->stop();
@@ -352,26 +356,66 @@ void AppController::handleSystemSleep()
     m_clickCompletionTimer->stop();
     m_activeFidget.reset();
     m_activeQuoteRequest = {};
+}
+
+void AppController::resumePetActivity()
+{
+    // The invariant belongs here rather than only at the call site. Two of the three
+    // things below already re-check, so the environment poll was the one a caller
+    // could restart while the pet was still quiet for some other reason.
+    if (isQuiet()) return;
+    m_environmentResolver->start();
+    setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
+    applyBehaviorState(m_behavior->state());
+    if (m_motionController->reducedMotion()
+        && m_behavior->state() == BehaviorState::ClickReaction) {
+        m_clickCompletionTimer->start();
+    }
+}
+
+void AppController::setQuiet(QuietReason reason, bool quiet)
+{
+    const bool wasQuiet = isQuiet();
+    m_quietReasons.setFlag(reason, quiet);
+    if (isQuiet() == wasQuiet) return;
+    if (quiet) {
+        stopPetActivity();
+    } else {
+        resumePetActivity();
+    }
     updateIdleScheduler();
+}
+
+void AppController::handleWake()
+{
+    // Unconditional, and before clearing the reason: clampToPrimaryScreen() also
+    // re-pushes the overlay level, in case display reconfiguration around sleep
+    // dropped it, and a rollover that happened while the resolver was stopped has
+    // to be picked up now rather than at a poll that will not arrive.
+    m_petWindow->clampToPrimaryScreen();
+    m_environmentResolver->reevaluate();
+}
+
+void AppController::handleSystemSleep()
+{
+    setQuiet(QuietReason::SystemAsleep, true);
 }
 
 void AppController::handleSystemWake()
 {
-    m_sleeping = false;
-    // clampToPrimaryScreen() also re-pushes the overlay level, in case display
-    // reconfiguration around sleep/wake dropped it.
-    m_petWindow->clampToPrimaryScreen();
-    m_environmentResolver->reevaluate();
-    if (m_petVisible) {
-        m_environmentResolver->start();
-        setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
-        applyBehaviorState(m_behavior->state());
-        if (m_motionController->reducedMotion()
-            && m_behavior->state() == BehaviorState::ClickReaction) {
-            m_clickCompletionTimer->start();
-        }
-    }
-    updateIdleScheduler();
+    handleWake();
+    setQuiet(QuietReason::SystemAsleep, false);
+}
+
+void AppController::handleDisplayAsleep()
+{
+    setQuiet(QuietReason::DisplayAsleep, true);
+}
+
+void AppController::handleDisplayAwake()
+{
+    handleWake();
+    setQuiet(QuietReason::DisplayAsleep, false);
 }
 
 void AppController::setTypingMonitoringEnabled(bool enabled)
@@ -381,7 +425,7 @@ void AppController::setTypingMonitoringEnabled(bool enabled)
         m_typingDetector->reset();
         return;
     }
-    if (!m_petVisible || m_sleeping) return;
+    if (isQuiet()) return;
     const InputStartResult result = m_inputSource->start();
     if (result == InputStartResult::Started) return;
 
@@ -617,7 +661,7 @@ void AppController::onTypingKey()
     // One key = one paw press. Gated so it animates only while the pet is actually
     // typing on screen; the driver moves nothing but an in-memory frame index (no
     // key content is ever involved).
-    if (m_sleeping || !m_petVisible) return;
+    if (isQuiet()) return;
     if (m_behavior->state() != BehaviorState::Typing) return;
     m_typingDriver->onKey();
 }
@@ -629,7 +673,7 @@ void AppController::applyBehaviorState(BehaviorState state)
     if (state != BehaviorState::Idle) m_activeFidget.reset();
     // Leaving Typing stops the keystroke-driven press machinery.
     if (state != BehaviorState::Typing) m_typingDriver->stop();
-    if (!m_currentAtlas || !m_petVisible || m_sleeping) {
+    if (!m_currentAtlas || isQuiet()) {
         m_animationPlayer->stop();
         updateIdleScheduler();
         return;
@@ -694,7 +738,7 @@ void AppController::applyBehaviorState(BehaviorState state)
 void AppController::updateIdleScheduler()
 {
     const bool active = m_behavior->state() == BehaviorState::Idle
-        && m_petVisible && !m_sleeping
+        && !isQuiet()
         && !m_motionController->reducedMotion()
         && !m_currentAtlas.isNull();
     m_idleScheduler->setActive(active);
@@ -704,7 +748,7 @@ void AppController::playIdleFidget(V2AnimationState state)
 {
     // Re-check the full gate: the timer may fire in the window between arming and
     // a higher-priority transition, or after motion/visibility changed.
-    if (m_behavior->state() != BehaviorState::Idle || !m_petVisible || m_sleeping
+    if (m_behavior->state() != BehaviorState::Idle || isQuiet()
         || m_motionController->reducedMotion() || m_currentAtlas.isNull()) {
         return;
     }
@@ -716,6 +760,11 @@ void AppController::playIdleFidget(V2AnimationState state)
 bool AppController::isIdleFidgetArmed() const
 {
     return m_idleScheduler->isArmed();
+}
+
+bool AppController::isEnvironmentPollRunning() const
+{
+    return m_environmentResolver->isRunning();
 }
 
 bool AppController::isTypingPressActive() const
@@ -810,29 +859,13 @@ void AppController::presentStartupFailure()
 
 void AppController::setPetVisible(bool visible)
 {
-    if (m_petVisible == visible) {
+    if (isHidden() != visible) {
         return;
     }
-    m_petVisible = visible;
-    if (!visible) {
-        m_animationPlayer->stop();
-        m_environmentResolver->stop();
-        m_inputSource->stop();
-        m_typingDetector->reset();
-        m_speechBubble->hide();
-        m_clickCompletionTimer->stop();
-        m_activeFidget.reset();
-        m_activeQuoteRequest = {};
-    } else if (!m_sleeping) {
-        m_environmentResolver->start();
-        setTypingMonitoringEnabled(m_settings->typingDetectionEnabled());
-        applyBehaviorState(m_behavior->state());
-        if (m_motionController->reducedMotion()
-            && m_behavior->state() == BehaviorState::ClickReaction) {
-            m_clickCompletionTimer->start();
-        }
-    }
-    updateIdleScheduler();
+    setQuiet(QuietReason::Hidden, !visible);
+    // Only this reason reaches the window and the menu. Deliberately outside
+    // setQuiet(): the pet stays on screen when the display or the machine sleeps,
+    // and telling it to hide would leave it hidden after the next wake.
     updateVisibilityAction();
     emit petVisibilityRequested(visible);
 }
@@ -840,8 +873,8 @@ void AppController::setPetVisible(bool visible)
 void AppController::updateVisibilityAction()
 {
     if (m_visibilityAction) {
-        m_visibilityAction->setText(m_petVisible ? m_localization->text(TextKey::HidePet)
-                                                  : m_localization->text(TextKey::ShowPet));
+        m_visibilityAction->setText(isHidden() ? m_localization->text(TextKey::ShowPet)
+                                               : m_localization->text(TextKey::HidePet));
     }
     if (m_settingsAction) m_settingsAction->setText(m_localization->text(TextKey::Settings));
     if (m_aboutAction) m_aboutAction->setText(m_localization->text(TextKey::AboutMenuItem));

@@ -153,9 +153,29 @@ never invents transitions:
 Runtime resource discipline (enforced by design): decode lazily, retain at most two
 atlas cache entries (`AtlasCache`) and a bounded clip cache (`ClipCache`), clear
 extension clips on environment/pet change, stop pet/environment/input timers while
-hidden or asleep, recompute primary-screen placement (`WindowPlacement`) after display
+quiet, recompute primary-screen placement (`WindowPlacement`) after display
 change and wake, build the settings/about/welcome windows only when asked for, and hand
 out frames as views rather than copies (see Conventions).
+
+**Quiet reasons.** `AppController::QuietReason` is `Hidden | SystemAsleep |
+DisplayAsleep`, several can hold at once, and the pet resumes only when the last one
+clears — so add a reason to that set rather than another `bool` and another copy of
+the teardown. Two rules the set exists to keep: only `Hidden` may reach
+`petVisibilityRequested` or the tray label, because a sleeping display has not put the
+pet away; and `resumePetActivity()` refuses to run while any reason stands, because
+the environment poll is the one thing it starts that does not re-check for itself.
+`isIdleFidgetArmed()` recomputes from the reasons and so cannot see a spurious resume
+— `isEnvironmentPollRunning()` is the observable that can, which is why the
+composition test asserts on it.
+
+`DisplayAsleep` comes from `NSWorkspaceScreensDidSleep/DidWake` on the workspace
+notification centre, deliberately the same centre as the existing sleep pair so there
+is one teardown path. Screen lock and the screen saver live on
+`NSDistributedNotificationCenter` and are **not** observed: they would need a second
+teardown path and a per-source mask to survive interleaving (lock, then display sleep,
+then display wake while still locked). All of these notifications are edge-triggered
+and nothing replays them, so launching while the display is already asleep starts out
+believing it is awake.
 
 **Validation depth.** Decoding every atlas and clip is the entire cost of package
 validation: for the built-in pet, 23 ms per atlas against 0.18 ms for the occupancy

@@ -26,6 +26,10 @@ public:
     void start();
     void stop();
     void reevaluate();
+    // Exposed for tests: whether the rollover poll is armed. It is the one thing
+    // AppController resumes that does not re-check for itself, so it is what proves
+    // the pet really went quiet rather than merely stopped animating.
+    bool isRunning() const;
 
     static Season seasonForDate(const QDate &date, Hemisphere hemisphere);
     static TimePhase phaseForTime(const QTime &time,
