@@ -8,6 +8,12 @@ QT_ROOT="${POTATO_QT_ROOT:-$ROOT_DIR/.tools/Qt/$QT_VERSION/macos}"
 QT_LICENSES="${POTATO_QT_LICENSES:-}"
 BUILD_DIR="${POTATO_BUILD_DIR:-$ROOT_DIR/build-release-$QT_VERSION}"
 DIST_DIR="${POTATO_DIST_DIR:-$ROOT_DIR/dist}"
+# Bounded deliberately. `cmake --build --parallel` with no number hands Make a
+# bare -j, which places no limit at all on concurrent jobs -- and this script
+# always builds from scratch with -O2 and links every target with LTO, so an
+# unbounded wave oversubscribes memory and lands slower than a capped one while
+# pinning every core.
+JOBS="${POTATO_JOBS:-$(sysctl -n hw.ncpu)}"
 
 if [[ "$(uname -m)" != "arm64" ]]; then
     print -u2 "Potato packaging requires an Apple Silicon Mac."
@@ -31,7 +37,11 @@ cmake -S "$ROOT_DIR" -B "$BUILD_DIR" \
     -DCMAKE_PREFIX_PATH="$QT_ROOT" \
     -DPOTATO_REQUIRE_EXACT_QT=ON \
     -DPOTATO_BUILD_TESTS=ON
-cmake --build "$BUILD_DIR" --parallel
+cmake --build "$BUILD_DIR" --parallel "$JOBS"
+# Serial on purpose, unlike the `check` target developers use: this is the
+# release gate, and parallel load is the one thing that can perturb the suite's
+# qWait/QTRY_* timing assertions. It costs seconds against a multi-minute LTO
+# build.
 ctest --test-dir "$BUILD_DIR" --output-on-failure
 
 APP="$BUILD_DIR/Potato.app"

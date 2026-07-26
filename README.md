@@ -22,9 +22,15 @@ Configure and test out of source:
 
 ```sh
 cmake -S . -B build -DPOTATO_BUILD_TESTS=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --build build -j 10                      # your core count, explicitly
+cmake --build build --target check             # ctest across the cores
 ```
+
+Always pass an explicit `-j <n>`. A bare `cmake --build -j` means *unlimited*
+jobs under Make, which oversubscribes the machine badly enough that a clean
+build takes several times longer than a capped one. The `check` target runs
+CTest in parallel; `ctest --test-dir build --output-on-failure` still works when
+you want it serial, and `-R <name>` selects one test.
 
 Set `POTATO_QT_ROOT` when Qt is not installed in a standard CMake prefix.
 
