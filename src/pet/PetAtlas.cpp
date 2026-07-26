@@ -4,6 +4,7 @@
 #include <QImageReader>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -95,7 +96,21 @@ bool PetAtlas::load(const QString &filePath)
     // QRgb and calls qAlpha, which still finds alpha in the top byte on
     // little-endian; and premultiplication only perturbs RGB where alpha < 255,
     // which is exactly what drawImage was doing per paint anyway.
-    m_image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    //
+    // convertTo(), not convertToFormat(): the latter returns a second image while
+    // the decoded one is still in scope, so loading this 1536x2288 atlas peaked at
+    // 26.8MiB to produce a 13.4MiB result -- and the acceptance check samples peak
+    // footprint. Both formats are 32bpp and `image` holds the only reference, so
+    // this rewrites the buffer in place.
+    image.convertTo(QImage::Format_ARGB32_Premultiplied);
+    // convertTo() is silent in both its failure modes: it leaves the image alone
+    // when no in-place converter exists for the pair, and nulls it when the
+    // allocation fails. Neither may reach the paint path pretending to be an atlas.
+    if (image.format() != QImage::Format_ARGB32_Premultiplied) {
+        m_error = QStringLiteral("Unable to convert the atlas to the raster format");
+        return false;
+    }
+    m_image = std::move(image);
     return true;
 }
 

@@ -6,6 +6,8 @@
 #include <QFileInfo>
 #include <QImageReader>
 
+#include <utility>
+
 bool AnimationClip::load(const QString &filePath, const QVector<int> &durationsMs)
 {
     m_image = {};
@@ -41,8 +43,16 @@ bool AnimationClip::load(const QString &filePath, const QVector<int> &durationsM
         return false;
     }
 
-    // Native raster format, for the same reason as PetAtlas::load.
-    m_image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    // Native raster format, converted in place, for the same two reasons as
+    // PetAtlas::load: the raster engine would otherwise convert on every paint,
+    // and convertToFormat() would hold the decoded strip alongside its converted
+    // copy. Same silent failure modes, so the same post-condition.
+    image.convertTo(QImage::Format_ARGB32_Premultiplied);
+    if (image.format() != QImage::Format_ARGB32_Premultiplied) {
+        m_error = QStringLiteral("Unable to convert the clip to the raster format");
+        return false;
+    }
+    m_image = std::move(image);
     m_durationsMs = durationsMs;
     return true;
 }
