@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.24)
 
 project(Potato VERSION 0.1.0 LANGUAGES C CXX OBJCXX)  # C is for vendored miniz
 
+# Link-time optimization, Release only -- RelWithDebInfo is what developers
+# iterate in and there is no reason to pay for LTO on every rebuild.
+#
+# Set here, before the first target, because it has to apply to every target to
+# do anything: almost all the code now lives in static libraries, so setting it
+# on the Potato executable alone produced a byte-identical binary. Project-wide
+# it is 8.8% smaller (750KB -> 684KB) at no measurable build-time cost.
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+
 # miniz is vendored in-tree (third_party/miniz), not fetched: the project
 # contract calls for explicitly vendored components, and a configure-time network
 # dependency made offline and reproducible builds impossible. The two files are
@@ -182,6 +191,60 @@ potato_add_library(potato_overlay
     LINK Qt6::Core
     PCH ${POTATO_PCH_CORE})
 
+# The application layer: AppController and everything it wires together,
+# including the macOS adapters.
+#
+# This one is an exception to the "cohesive low-level group, no system
+# frameworks" rule above, and it is worth being explicit about why. It exists for
+# exactly two consumers -- the app and potato_app_controller_test -- which
+# between them were compiling the same thirty sources twice, including the two
+# largest files in the project. Both already link AppKit, ApplicationServices and
+# ServiceManagement, so nothing acquires a dependency it did not have.
+#
+# No other test links it, and none should. The narrower groups keep compiling
+# just the sources they exercise, which is what lets potato_core_test link
+# TypingActivityDetector without dragging in a CGEventTap.
+potato_add_library(potato_app
+    SOURCES src/app/AppController.cpp src/app/AppController.h
+            src/app/AppNotifier.cpp src/app/AppNotifier.h
+            src/app/SettingsViewState.cpp src/app/SettingsViewState.h
+            src/settings/SettingsWindow.cpp src/settings/SettingsWindow.h
+            src/settings/OnboardingWindow.cpp src/settings/OnboardingWindow.h
+            src/settings/AboutWindow.cpp src/settings/AboutWindow.h
+            src/settings/PetPreviewWidget.cpp src/settings/PetPreviewWidget.h
+            src/pet/PetWindow.cpp src/pet/PetWindow.h
+            src/pet/AnimationPlayer.cpp src/pet/AnimationPlayer.h
+            src/pet/BehaviorController.cpp src/pet/BehaviorController.h
+            src/pet/IdleActivityScheduler.cpp src/pet/IdleActivityScheduler.h
+            src/pet/AtlasCache.cpp src/pet/AtlasCache.h
+            src/pet/ClipCache.cpp src/pet/ClipCache.h
+            src/pet/TypingAnimationDriver.cpp src/pet/TypingAnimationDriver.h
+            src/resources/ArchiveExtractor.cpp src/resources/ArchiveExtractor.h
+            src/resources/PetPackageImporter.cpp src/resources/PetPackageImporter.h
+            src/resources/PetLibrary.cpp src/resources/PetLibrary.h
+            src/resources/PetResourceSummary.cpp src/resources/PetResourceSummary.h
+            src/quotes/QuoteProvider.cpp src/quotes/QuoteProvider.h
+            src/quotes/SpeechBubble.cpp src/quotes/SpeechBubble.h
+            src/input/InputActivitySource.h
+            src/input/MacInputActivitySource.mm src/input/MacInputActivitySource.h
+            src/input/TypingActivityDetector.cpp src/input/TypingActivityDetector.h
+            src/accessibility/MotionController.cpp src/accessibility/MotionController.h
+            src/platform/SystemActivitySource.h
+            src/platform/MacSystemActivitySource.mm src/platform/MacSystemActivitySource.h
+            src/platform/MacApplication.mm src/platform/MacApplication.h
+            src/platform/SystemSymbols.h src/platform/MacSystemSymbols.mm
+            src/platform/MacWindowOverlay.mm
+            src/login/LoginItemController.h
+            src/login/LoginItemCoordinator.cpp src/login/LoginItemCoordinator.h
+            src/login/MacLoginItemController.mm src/login/MacLoginItemController.h
+    LINK Qt6::Core Qt6::Gui Qt6::Widgets miniz
+         potato_settings_core potato_theme potato_ui potato_environment
+         potato_geometry potato_atlas potato_policy potato_package potato_overlay
+         "-framework AppKit"
+         "-framework ApplicationServices"
+         "-framework ServiceManagement"
+    PCH ${POTATO_PCH_WIDGETS})
+
 set(POTATO_LIBRARIES
     potato_settings_core
     potato_theme
@@ -192,78 +255,20 @@ set(POTATO_LIBRARIES
     potato_policy
     potato_package
     potato_overlay
+    potato_app
 )
 
 qt_add_executable(Potato MACOSX_BUNDLE
     src/main.cpp
-    src/app/AppController.cpp
-    src/app/AppController.h
-    src/app/AppNotifier.cpp
-    src/app/AppNotifier.h
-    src/app/SettingsViewState.cpp
-    src/app/SettingsViewState.h
     src/app/SingleInstance.cpp
     src/app/SingleInstance.h
-    src/settings/SettingsWindow.cpp
-    src/settings/SettingsWindow.h
-    src/settings/OnboardingWindow.cpp
-    src/settings/OnboardingWindow.h
-    src/settings/AboutWindow.cpp
-    src/settings/AboutWindow.h
-    src/pet/PetWindow.cpp
-    src/pet/PetWindow.h
-    src/pet/AnimationPlayer.cpp
-    src/pet/AnimationPlayer.h
-    src/pet/BehaviorController.cpp
-    src/pet/BehaviorController.h
-    src/pet/IdleActivityScheduler.cpp
-    src/pet/IdleActivityScheduler.h
-    src/pet/AtlasCache.cpp
-    src/pet/AtlasCache.h
-    src/pet/ClipCache.cpp
-    src/pet/ClipCache.h
-    src/pet/TypingAnimationDriver.cpp
-    src/pet/TypingAnimationDriver.h
-    src/resources/PetResourceSummary.cpp
-    src/resources/PetResourceSummary.h
-    src/resources/ArchiveExtractor.cpp
-    src/resources/ArchiveExtractor.h
-    src/resources/PetPackageImporter.cpp
-    src/resources/PetPackageImporter.h
-    src/resources/PetLibrary.cpp
-    src/resources/PetLibrary.h
-    src/settings/PetPreviewWidget.cpp
-    src/settings/PetPreviewWidget.h
-    src/quotes/QuoteProvider.cpp
-    src/quotes/QuoteProvider.h
-    src/quotes/SpeechBubble.cpp
-    src/quotes/SpeechBubble.h
-    src/input/InputActivitySource.h
-    src/input/MacInputActivitySource.h
-    src/input/MacInputActivitySource.mm
-    src/input/TypingActivityDetector.cpp
-    src/input/TypingActivityDetector.h
-    src/accessibility/MotionController.cpp
-    src/accessibility/MotionController.h
-    src/platform/SystemActivitySource.h
-    src/platform/MacSystemActivitySource.h
-    src/platform/MacSystemActivitySource.mm
-    src/login/LoginItemController.h
-    src/login/LoginItemCoordinator.cpp
-    src/login/LoginItemCoordinator.h
-    src/login/MacLoginItemController.h
-    src/login/MacLoginItemController.mm
-    src/platform/MacApplication.h
-    src/platform/MacApplication.mm
-    src/platform/SystemSymbols.h
-    src/platform/MacSystemSymbols.mm
-    src/platform/MacWindowOverlay.mm
 )
 
 target_include_directories(Potato PRIVATE src)
 target_compile_options(Potato PRIVATE -Wall -Wextra -Wpedantic)
 target_compile_definitions(Potato PRIVATE POTATO_VERSION="${PROJECT_VERSION}")
 target_precompile_headers(Potato PRIVATE ${POTATO_PCH_WIDGETS})
+
 
 target_link_libraries(Potato PRIVATE
     ${POTATO_LIBRARIES}

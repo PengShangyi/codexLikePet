@@ -217,86 +217,23 @@ target_link_libraries(potato_pet_overlay_test PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test "-framework AppKit")
 add_test(NAME potato_pet_overlay_test COMMAND potato_pet_overlay_test)
 
-# AppController is the wiring hub, so its test links most of the app. Fakes are
-# injected via AppController::Dependencies; the .mm adapters are linked but their
-# platform code never runs under RuntimeCheck. Runs offscreen for CI.
+# AppController is the wiring hub, so its test needs most of the app. It links
+# potato_app -- the one library that includes the macOS adapters -- because it
+# and the app itself were otherwise compiling the same thirty sources twice.
+# Fakes are injected via AppController::Dependencies, so the .mm adapters are
+# linked but their platform code never runs under RuntimeCheck. Offscreen for CI.
 qt_add_executable(potato_app_controller_test
     test_app_controller.cpp
     support/AtlasFixture.cpp
     support/AtlasFixture.h
-    ../src/app/AppController.cpp
-    ../src/app/AppController.h
-    ../src/app/AppNotifier.cpp
-    ../src/app/AppNotifier.h
-    ../src/app/SettingsViewState.cpp
-    ../src/app/SettingsViewState.h
-    ../src/settings/SettingsWindow.cpp
-    ../src/settings/SettingsWindow.h
-    ../src/settings/OnboardingWindow.cpp
-    ../src/settings/OnboardingWindow.h
-    ../src/settings/AboutWindow.cpp
-    ../src/settings/AboutWindow.h
-    ../src/settings/PetPreviewWidget.cpp
-    ../src/settings/PetPreviewWidget.h
-    ../src/pet/PetWindow.cpp
-    ../src/pet/PetWindow.h
-    ../src/pet/AnimationPlayer.cpp
-    ../src/pet/AnimationPlayer.h
-    ../src/pet/BehaviorController.cpp
-    ../src/pet/BehaviorController.h
-    ../src/pet/IdleActivityScheduler.cpp
-    ../src/pet/IdleActivityScheduler.h
-    ../src/pet/AtlasCache.cpp
-    ../src/pet/AtlasCache.h
-    ../src/pet/ClipCache.cpp
-    ../src/pet/ClipCache.h
-    ../src/pet/TypingAnimationDriver.cpp
-    ../src/pet/TypingAnimationDriver.h
-    ../src/resources/ArchiveExtractor.cpp
-    ../src/resources/ArchiveExtractor.h
-    ../src/resources/PetPackageImporter.cpp
-    ../src/resources/PetPackageImporter.h
-    ../src/resources/PetLibrary.cpp
-    ../src/resources/PetLibrary.h
-    ../src/resources/PetResourceSummary.cpp
-    ../src/resources/PetResourceSummary.h
-    ../src/quotes/QuoteProvider.cpp
-    ../src/quotes/QuoteProvider.h
-    ../src/quotes/SpeechBubble.cpp
-    ../src/quotes/SpeechBubble.h
-    ../src/input/InputActivitySource.h
-    ../src/input/MacInputActivitySource.mm
-    ../src/input/MacInputActivitySource.h
-    ../src/input/TypingActivityDetector.cpp
-    ../src/input/TypingActivityDetector.h
-    ../src/accessibility/MotionController.cpp
-    ../src/accessibility/MotionController.h
-    ../src/platform/SystemActivitySource.h
-    ../src/platform/MacSystemActivitySource.mm
-    ../src/platform/MacSystemActivitySource.h
-    ../src/platform/MacApplication.mm
-    ../src/platform/MacApplication.h
-    ../src/platform/SystemSymbols.h
-    ../src/platform/MacSystemSymbols.mm
-    ../src/platform/MacWindowOverlay.mm
-    ../src/login/LoginItemController.h
-    ../src/login/LoginItemCoordinator.cpp
-    ../src/login/LoginItemCoordinator.h
-    ../src/login/MacLoginItemController.mm
-    ../src/login/MacLoginItemController.h
 )
 target_include_directories(potato_app_controller_test PRIVATE ../src .)
 target_compile_definitions(potato_app_controller_test PRIVATE
     POTATO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 target_link_libraries(potato_app_controller_test PRIVATE
-    potato_settings_core potato_atlas potato_geometry potato_package potato_policy potato_environment potato_overlay
-    potato_ui potato_theme
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test miniz
-    "-framework AppKit"
-    "-framework ApplicationServices"
-    "-framework ServiceManagement"
-)
+    potato_app
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
 add_test(NAME potato_app_controller_test COMMAND potato_app_controller_test)
 set_tests_properties(potato_app_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
