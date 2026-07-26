@@ -66,6 +66,29 @@ if ! find "$APP/Contents/PlugIns/imageformats" -maxdepth 1 -type f \
     print -u2 "macdeployqt did not deploy Potato's required WebP image plugin."
     exit 1
 fi
+
+# Not pruning the deployed plugins, and here is the arithmetic, because the obvious
+# version of this idea is worth more than it turns out to be.
+#
+# macdeployqt runs bare above and copies whole plugin categories. Only three are
+# needed: platforms/libqcocoa, styles/libqmacstyle (QMacStyle draws every native
+# control -- see CLAUDE.md), and imageformats/libqwebp. Measured against the 6.8.4
+# tree in .tools, the rest comes to 3.48 MB, of which sqldrivers is 1.62 MB and
+# almost certainly never deployed since QtSql is not linked. The realistic saving is
+# the eight unused imageformats plugins plus tls and networkinformation, so about
+# 1.5 MB of a ~60 MB bundle -- 20 MB of which is sprite assets.
+#
+# Note for anyone who read that a prune saves 9.8 MB of QtPdf: that is true of a
+# Homebrew Qt, where libqpdf.dylib drags in QtPdf.framework from qtwebengine. The
+# release line has neither libqpdf nor libqsvg, so on this path those deletes are
+# no-ops -- and under `set -e` an unguarded rm against a missing path aborts the run.
+#
+# If it is done: insert it here, after every existence and plist assertion and before
+# the arch-thinning pass below, since deleting after `codesign` at the end invalidates
+# the signature that the next line verifies. Use an allowlist, guard every delete, and
+# re-assert the WebP plugin afterwards -- the check above runs before any prune and
+# proves nothing about the result. It cannot be verified on a machine without Qt
+# 6.8.8, because this script refuses to run on any other version.
 if [[ "$(plutil -extract LSUIElement raw -o - "$APP/Contents/Info.plist")" != "true" ]]; then
     print -u2 "The packaged app is not configured as a Dock-less menu-bar app."
     exit 1
