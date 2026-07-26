@@ -12,7 +12,12 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
+#include <QSemaphore>
 #include <QSet>
+#include <QThreadPool>
+
+#include <optional>
+#include <vector>
 
 namespace {
 void addIssue(PackageValidationResult *result,
@@ -47,6 +52,13 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
     result.package.rootPath = rootPath;
     validateDirectoryEnvelope(rootPath, &result);
 
+    // The walk below records pixel-level checks here instead of running them;
+    // they are dispatched together at the end. Null at Metadata depth, which is
+    // what makes "Metadata never decodes" structural rather than a repeated
+    // conditional at each decode site.
+    DeepCheckSink deepChecks;
+    DeepCheckSink *const deep = depth == ValidationDepth::Full ? &deepChecks : nullptr;
+
     QJsonObject petObject;
     QString error;
     const QString petManifestPath = QDir(rootPath).filePath(QStringLiteral("pet.json"));
@@ -78,7 +90,7 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
     if (petObject.value(QStringLiteral("spriteVersionNumber")).toInt() != 2) {
         addIssue(&result, QStringLiteral("pet.version"), QStringLiteral("spriteVersionNumber must be 2"));
     }
-    validateAtlas(rootPath, result.package.spriteSheetPath, &result, QStringLiteral("base"), depth);
+    validateAtlas(rootPath, result.package.spriteSheetPath, &result, QStringLiteral("base"), deep);
 
     const QString potatoPath = QDir(rootPath).filePath(QStringLiteral("potato.json"));
     const bool hasPotatoManifest = QFileInfo::exists(potatoPath);
@@ -87,10 +99,11 @@ PackageValidationResult PetPackageValidator::validateDirectory(const QString &di
         if (!readJsonObject(potatoPath, &potatoObject, &error)) {
             addIssue(&result, QStringLiteral("potato.manifest"), error, QStringLiteral("potato.json"));
         } else {
-            parsePotatoManifest(rootPath, potatoObject, &result, depth);
+            parsePotatoManifest(rootPath, potatoObject, &result, deep);
         }
     }
     validateKnownFiles(rootPath, result.package, hasPotatoManifest, &result);
+    runDeepChecks(deepChecks, &result);
     return result;
 }
 
@@ -161,7 +174,7 @@ bool PetPackageValidator::isKnownClipKey(const QString &key)
 void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
                                               const QJsonObject &object,
                                               PackageValidationResult *result,
-                                              ValidationDepth depth) const
+                                              DeepCheckSink *deep) const
 {
     if (object.value(QStringLiteral("schemaVersion")).toInt() != 1) {
         addIssue(result, QStringLiteral("potato.version"), QStringLiteral("potato.json schemaVersion must be 1"));
@@ -205,7 +218,7 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
         }
         const QString path = iterator.value().toString();
         result->package.variants.insert(iterator.key(), path);
-        validateAtlas(rootPath, path, result, QStringLiteral("variant %1").arg(iterator.key()), depth);
+        validateAtlas(rootPath, path, result, QStringLiteral("variant %1").arg(iterator.key()), deep);
     }
 
     const QJsonValue clipsValue = object.value(QStringLiteral("clips"));
@@ -219,7 +232,7 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
                &result->package.clips,
                result,
                QStringLiteral("base"),
-               depth);
+               deep);
 
     const QJsonValue variantClipsValue = object.value(QStringLiteral("variantClips"));
     if (!variantClipsValue.isUndefined() && !variantClipsValue.isObject()) {
@@ -248,7 +261,7 @@ void PetPackageValidator::parsePotatoManifest(const QString &rootPath,
                    &destination,
                    result,
                    QStringLiteral("variant %1").arg(iterator.key()),
-                   depth);
+                   deep);
     }
 }
 
@@ -257,7 +270,7 @@ void PetPackageValidator::parseClips(const QString &rootPath,
                                      QHash<QString, ClipDefinition> *clips,
                                      PackageValidationResult *result,
                                      const QString &context,
-                                     ValidationDepth depth) const
+                                     DeepCheckSink *deep) const
 {
     for (auto iterator = object.begin(); iterator != object.end(); ++iterator) {
         if (!isKnownClipKey(iterator.key())) {
@@ -285,7 +298,73 @@ void PetPackageValidator::parseClips(const QString &rootPath,
         ClipDefinition clip{definition.value(QStringLiteral("path")).toString(),
                             parseDurations(definition.value(QStringLiteral("durationsMs")))};
         clips->insert(iterator.key(), clip);
-        validateClip(rootPath, iterator.key(), clip, result, context, depth);
+        validateClip(rootPath, iterator.key(), clip, result, context, deep);
+    }
+}
+
+std::optional<PackageIssue> PetPackageValidator::runDeepCheck(const DeepCheck &check)
+{
+    // Runs on a worker thread. Everything it touches is either its own local or
+    // a const member of `check`, and the files are opened read-only, so there is
+    // no shared mutable state to guard.
+    if (check.isAtlas) {
+        PetAtlas atlas;
+        if (!atlas.load(check.absolutePath)) {
+            return PackageIssue{PackageIssueSeverity::Error,
+                                QStringLiteral("atlas.decode"),
+                                QStringLiteral("%1 atlas: %2").arg(check.context, atlas.errorString()),
+                                check.relativePath};
+        }
+        QString error;
+        if (!atlas.validateV2Occupancy(&error)) {
+            return PackageIssue{PackageIssueSeverity::Error,
+                                QStringLiteral("atlas.cells"),
+                                QStringLiteral("%1 atlas: %2").arg(check.context, error),
+                                check.relativePath};
+        }
+        return std::nullopt;
+    }
+
+    QImageReader reader(check.absolutePath);
+    reader.setAutoTransform(false);
+    const QImage image = reader.read();
+    if (image.isNull() || !image.hasAlphaChannel()) {
+        return PackageIssue{PackageIssueSeverity::Error,
+                            QStringLiteral("clip.geometry"),
+                            QStringLiteral("%1 %2 clip must be transparent and use 192x208 cells")
+                                .arg(check.context, check.clipName),
+                            check.relativePath};
+    }
+    return std::nullopt;
+}
+
+void PetPackageValidator::runDeepChecks(const DeepCheckSink &checks, PackageValidationResult *result)
+{
+    if (checks.isEmpty()) return;
+    if (checks.size() == 1) {
+        if (const auto issue = runDeepCheck(checks.first())) result->issues.append(*issue);
+        return;
+    }
+
+    // A local pool rather than QThreadPool::globalInstance(): this blocks until
+    // its own work finishes, and borrowing the global pool would mean a future
+    // caller on a pool thread could wait on threads it is itself occupying.
+    // Creating a handful of threads is noise next to the ~23ms each decode costs.
+    QThreadPool pool;
+    std::vector<std::optional<PackageIssue>> outcomes(static_cast<size_t>(checks.size()));
+    QSemaphore finished;
+    for (qsizetype index = 0; index < checks.size(); ++index) {
+        pool.start([&checks, &outcomes, &finished, index] {
+            outcomes[static_cast<size_t>(index)] = runDeepCheck(checks.at(index));
+            finished.release();
+        });
+    }
+    finished.acquire(static_cast<int>(checks.size()));
+
+    // Appended in walk order, not completion order: which decode finished first
+    // must not change the report a user reads.
+    for (const auto &outcome : outcomes) {
+        if (outcome) result->issues.append(*outcome);
     }
 }
 
@@ -293,7 +372,7 @@ void PetPackageValidator::validateAtlas(const QString &rootPath,
                                         const QString &relativePath,
                                         PackageValidationResult *result,
                                         const QString &context,
-                                        ValidationDepth depth) const
+                                        DeepCheckSink *deep) const
 {
     QString error;
     if (!isSafeRelativePath(rootPath, relativePath, &error)) {
@@ -303,21 +382,9 @@ void PetPackageValidator::validateAtlas(const QString &rootPath,
                  relativePath);
         return;
     }
-    if (depth == ValidationDepth::Metadata) return;  // decoding is the Full-only part
-    PetAtlas atlas;
-    if (!atlas.load(QDir(rootPath).filePath(relativePath))) {
-        addIssue(result,
-                 QStringLiteral("atlas.decode"),
-                 QStringLiteral("%1 atlas: %2").arg(context, atlas.errorString()),
-                 relativePath);
-        return;
-    }
-    if (!atlas.validateV2Occupancy(&error)) {
-        addIssue(result,
-                 QStringLiteral("atlas.cells"),
-                 QStringLiteral("%1 atlas: %2").arg(context, error),
-                 relativePath);
-    }
+    // Decoding is the Full-only part, and no sink means Metadata depth.
+    if (!deep) return;
+    deep->append(DeepCheck{true, QDir(rootPath).filePath(relativePath), relativePath, context, {}});
 }
 
 void PetPackageValidator::validateClip(const QString &rootPath,
@@ -325,7 +392,7 @@ void PetPackageValidator::validateClip(const QString &rootPath,
                                        const ClipDefinition &clip,
                                        PackageValidationResult *result,
                                        const QString &context,
-                                       ValidationDepth depth) const
+                                       DeepCheckSink *deep) const
 {
     QString error;
     if (!isSafeRelativePath(rootPath, clip.path, &error)) {
@@ -347,16 +414,10 @@ void PetPackageValidator::validateClip(const QString &rootPath,
         return;
     }
     // Decoding is the Full-only part; the geometry above came from the header.
-    if (depth == ValidationDepth::Full) {
-        const QImage image = reader.read();
-        if (image.isNull() || !image.hasAlphaChannel()) {
-            addIssue(result,
-                     QStringLiteral("clip.geometry"),
-                     QStringLiteral("%1 %2 clip must be transparent and use 192x208 cells")
-                         .arg(context, name),
-                     clip.path);
-            return;
-        }
+    // Recorded rather than run here, so it can go in parallel with the atlases.
+    // The duration checks below are pure manifest arithmetic and stay inline.
+    if (deep) {
+        deep->append(DeepCheck{false, QDir(rootPath).filePath(clip.path), clip.path, context, name});
     }
     if (clip.durationsMs.size() != frames) {
         addIssue(result,

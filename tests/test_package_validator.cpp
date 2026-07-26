@@ -318,6 +318,49 @@ private slots:
         QVERIFY(!result.isValid());
         QVERIFY(result.errorMessages().join(QLatin1Char(' ')).contains(QStringLiteral("512MiB")));
     }
+
+    // The pixel-level checks run concurrently, so the order they finish in is not
+    // the order they were queued in. The report must not show it: a user
+    // comparing two runs of the same broken package has to see the same list,
+    // and a test asserting on errorMessages().first() must not flake.
+    void concurrentPixelChecksStillReportInAStableOrder()
+    {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+
+        // Three atlases, each broken the same way (an opaque pixel in a cell the
+        // v2 contract requires to be empty), so the report has three
+        // indistinguishable-except-for-order entries to get wrong.
+        const auto writeBrokenAtlas = [](const QString &path) {
+            QImage image(TestAtlas::validImage());
+            image.setPixelColor(7 * PetAtlas::CellWidth + 5, 5, Qt::red);
+            return image.save(path);
+        };
+        QVERIFY(writeBrokenAtlas(temp.filePath(QStringLiteral("spritesheet.png"))));
+        QVERIFY(writeBrokenAtlas(temp.filePath(QStringLiteral("summer-day.png"))));
+        QVERIFY(writeBrokenAtlas(temp.filePath(QStringLiteral("winter-night.png"))));
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("pet.json")), validPetManifest()));
+        QVERIFY(writeJson(temp.filePath(QStringLiteral("potato.json")),
+                          {{QStringLiteral("schemaVersion"), 1},
+                           {QStringLiteral("variants"),
+                            QJsonObject{{QStringLiteral("summer-day"), QStringLiteral("summer-day.png")},
+                                        {QStringLiteral("winter-night"), QStringLiteral("winter-night.png")}}}}));
+
+        const QStringList expected =
+            PetPackageValidator().validateDirectory(temp.path()).errorMessages();
+        QCOMPARE(expected.size(), 3);
+        for (const QString &message : expected) {
+            QVERIFY2(message.contains(QStringLiteral("Unused cell")), qPrintable(message));
+        }
+        // Walk order: the base atlas first, then the variants as the manifest
+        // iteration produced them.
+        QVERIFY2(expected.first().contains(QStringLiteral("base atlas")),
+                 qPrintable(expected.first()));
+
+        for (int run = 0; run < 20; ++run) {
+            QCOMPARE(PetPackageValidator().validateDirectory(temp.path()).errorMessages(), expected);
+        }
+    }
 };
 
 // Runs inside a grouped binary; see tests/support/TestRunner.h.
