@@ -49,6 +49,31 @@ void AtlasCache::clear()
     m_lru.clear();
 }
 
+void AtlasCache::purgeUnreferenced()
+{
+    // QSharedPointer exposes no reference count, so ask a QWeakPointer instead:
+    // drop the cache's reference and see whether the atlas is still alive. If it is,
+    // something else owns it and the entry goes back; if it is not, the cache was
+    // its last owner and the 13.4MB has already been returned.
+    //
+    // Iterating over a copy of the key order, because take() rehashes and mutating
+    // m_entries under its own iterator is undefined. And m_lru must lose the key
+    // too: the eviction loop in load() pops from the front while only checking
+    // m_entries.size(), so a stale key there makes it discard a *live* entry to make
+    // room that already exists.
+    const QStringList keys = m_lru;
+    for (const QString &key : keys) {
+        QSharedPointer<PetAtlas> entry = m_entries.take(key);
+        QWeakPointer<PetAtlas> observer = entry;
+        entry.clear();
+        if (QSharedPointer<PetAtlas> survivor = observer.lock()) {
+            m_entries.insert(key, survivor);
+        } else {
+            m_lru.removeAll(key);
+        }
+    }
+}
+
 void AtlasCache::touch(const QString &absolutePath)
 {
     m_lru.removeAll(absolutePath);

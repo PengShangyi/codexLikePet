@@ -76,6 +76,15 @@ entries and a bounded clip cache, clears extension clips on environment or pet
 changes, stops pet, environment, and input timers while hidden or asleep, and
 recomputes primary screen placement after display changes and wake.
 
+The atlas capacity bounds how many atlases the cache indexes, not how many the
+process keeps: an entry nothing else references still occupies its slot, which
+after a rollover means the outgoing 13.4 MB variant survives until a third one
+arrives. Loading a variant therefore ends by dropping every entry no other owner
+holds, and must do so last — the four holders of the outgoing atlas release at
+four different points, so purging any earlier frees nothing. Flipping back across
+a boundary decodes again rather than finding the previous variant cached, which
+is the trade this makes deliberately.
+
 The settings, about, and welcome windows are constructed on first use rather than
 at startup, since most sessions never open any of them.
 

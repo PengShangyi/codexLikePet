@@ -83,6 +83,38 @@ private slots:
         QVERIFY(cache.contains(third));
     }
 
+    // The capacity bounds what the cache indexes, not what the process keeps: after a
+    // rollover the outgoing atlas is dead but holds its slot until a third variant
+    // arrives. purgeUnreferenced() is what actually returns those 13.4MB.
+    void purgingDropsUnreferencedAtlasesAndKeepsTheRestUsable()
+    {
+        const QString first = createAtlas(QStringLiteral("purge-first"), Qt::red);
+        const QString second = createAtlas(QStringLiteral("purge-second"), Qt::green);
+        AtlasCache cache(2);
+
+        // `held` stands in for m_currentAtlas / the animation player; `first` has no
+        // owner but the cache, exactly like a variant that has just rolled over.
+        QVERIFY(cache.load(first));
+        const QSharedPointer<PetAtlas> held = cache.load(second);
+        QVERIFY(held);
+        QCOMPARE(cache.size(), 2);
+
+        cache.purgeUnreferenced();
+        QVERIFY2(!cache.contains(first), "nothing else held it, so it should be gone");
+        QVERIFY2(cache.contains(second), "still in use, so it must survive the purge");
+        QCOMPARE(cache.size(), 1);
+
+        // The regression that a purge invites: dropping a key from the hash but not
+        // from the LRU list. load() evicts from the front of that list while checking
+        // only the hash's size, so a stale key makes it throw away a live entry to
+        // free a slot that is already free. If that happens, `second` disappears.
+        const QString third = createAtlas(QStringLiteral("purge-third"), Qt::blue);
+        QVERIFY(cache.load(third));
+        QVERIFY2(cache.contains(second), "a stale LRU key evicted an entry still in use");
+        QVERIFY(cache.contains(third));
+        QCOMPARE(cache.size(), 2);
+    }
+
     void clipCacheEvictsLeastRecentlyUsedAndKeysOnDurations()
     {
         const auto strip = [this](const QString &name, int frames) {

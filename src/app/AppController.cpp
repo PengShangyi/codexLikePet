@@ -463,6 +463,12 @@ void AppController::loadCurrentVariant()
     m_settingsView.setPreviewAtlas(atlas, m_currentPackage->renderMode == RenderMode::Smooth);
     m_settingsView.setValidationReport({}, false);
     configurePetPreview();
+    // Last, not next to m_clipCache->clear() above. A rollover replaces four holders
+    // of the outgoing atlas and they let go at four different points: m_currentAtlas
+    // here, AnimationPlayer::m_atlas and PetWindow's frame at setAtlas(), and
+    // PetPreviewWidget's at configurePetPreview(). Purging any earlier finds every
+    // entry still referenced and frees nothing.
+    m_atlasCache->purgeUnreferenced();
 }
 
 void AppController::configurePetPreview()
