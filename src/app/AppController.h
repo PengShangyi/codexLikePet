@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 
+#include "app/SettingsViewState.h"
 #include "pet/BehaviorController.h"
 #include "pet/IdleActivityScheduler.h"
 #include "resources/PetPackage.h"
@@ -114,6 +115,11 @@ private:
     void updateResourceSummary();
     void updateEnvironmentSummary();
     void loadPreviewAtlas(const QString &relativePath);
+    // Builds the settings window on first call, wires it, and replays the state
+    // recorded in m_settingsView. Never returns null.
+    SettingsWindow *settingsWindow();
+    OnboardingWindow *onboardingWindow();
+    AboutWindow *aboutWindow();
     void loadPreviewClip(const QString &key);
     QSharedPointer<AnimationClip> loadClip(const QString &name);
     bool playClip(const QString &name, bool restart = true);
@@ -129,9 +135,14 @@ private:
     QAction *m_quitAction;
     AppSettings *m_settings;
     Localization *m_localization;
+    // All three are built on first use, not at startup: between them they are
+    // five settings pages, a preview widget and two more windows, and most
+    // sessions never open any of them. m_settingsView absorbs the state pushed
+    // at the settings window in the meantime.
     std::unique_ptr<SettingsWindow> m_settingsWindow;
     std::unique_ptr<OnboardingWindow> m_onboardingWindow;
     std::unique_ptr<AboutWindow> m_aboutWindow;
+    SettingsViewState m_settingsView;
     std::unique_ptr<PetWindow> m_petWindow;
     PetLibrary *m_petLibrary;
     std::unique_ptr<PetPackageImporter> m_importer;

@@ -2,6 +2,8 @@
 
 #include <QString>
 
+#include <functional>
+
 class QSystemTrayIcon;
 class QWidget;
 
@@ -41,7 +43,12 @@ public:
 class QtAppNotifier final : public AppNotifier
 {
 public:
-    QtAppNotifier(QSystemTrayIcon *tray, QWidget *dialogParent);
+    // The dialog parent is resolved per call rather than captured, because the
+    // settings window is built on first use and may not exist yet. The provider
+    // must return null in that case rather than creating it: a tray-triggered
+    // warning is not a reason to build five pages of settings widgets, and a
+    // parentless QMessageBox is the correct thing for one anyway.
+    QtAppNotifier(QSystemTrayIcon *tray, std::function<QWidget *()> dialogParent);
 
     void notifyPetLoadError(const QString &title, const QString &body) override;
     PermissionChoice promptInputPermission(const QString &title,
@@ -52,6 +59,8 @@ public:
     void showFatalStartup(const QString &title, const QString &message) override;
 
 private:
+    QWidget *dialogParent() const;
+
     QSystemTrayIcon *m_tray;
-    QWidget *m_dialogParent;
+    std::function<QWidget *()> m_dialogParent;
 };

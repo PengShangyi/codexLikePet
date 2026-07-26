@@ -200,6 +200,8 @@ qt_add_executable(Potato MACOSX_BUNDLE
     src/app/AppController.h
     src/app/AppNotifier.cpp
     src/app/AppNotifier.h
+    src/app/SettingsViewState.cpp
+    src/app/SettingsViewState.h
     src/app/SingleInstance.cpp
     src/app/SingleInstance.h
     src/settings/SettingsWindow.cpp

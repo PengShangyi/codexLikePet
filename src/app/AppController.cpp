@@ -77,7 +77,6 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
     , m_quitAction(nullptr)
     , m_settings(deps.settings ? deps.settings : new AppSettings(this))
     , m_localization(new Localization(m_settings, this))
-    , m_settingsWindow(std::make_unique<SettingsWindow>(m_settings, m_localization))
     , m_petWindow(std::make_unique<PetWindow>(m_settings))
     , m_petLibrary(new PetLibrary(deps.builtInPetRoot, deps.userPetRoot, this))
     , m_importer(std::make_unique<PetPackageImporter>(PetStore()))
@@ -109,11 +108,12 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
         ? deps.systemTrayAvailable
         : std::function<bool()>([] { return QSystemTrayIcon::isSystemTrayAvailable(); });
     if (!deps.notifier) {
-        m_ownedNotifier = std::make_unique<QtAppNotifier>(m_trayIcon, m_settingsWindow.get());
+        // Resolved per dialog, and deliberately does not call settingsWindow():
+        // a warning from the tray must not be what builds the settings tree.
+        m_ownedNotifier = std::make_unique<QtAppNotifier>(
+            m_trayIcon, [this] { return static_cast<QWidget *>(m_settingsWindow.get()); });
     }
     m_notifier = deps.notifier ? deps.notifier : m_ownedNotifier.get();
-    m_onboardingWindow = std::make_unique<OnboardingWindow>(m_localization);
-    m_aboutWindow = std::make_unique<AboutWindow>(m_localization);
     const auto applyPetAccessibility = [this] {
         m_petWindow->setAccessibleName(m_localization->text(TextKey::PetAccessibleName));
         m_petWindow->setAccessibleDescription(m_localization->text(TextKey::PetAccessibleDescription));
@@ -127,21 +127,11 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
             m_behavior->finishClickReaction();
         }
     });
-    connect(m_settingsWindow.get(), &SettingsWindow::resetPositionRequested, m_petWindow.get(), &PetWindow::resetPosition);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateVisibilityAction);
     connect(m_localization, &Localization::languageChanged, this, &AppController::configurePetPreview);
     // The summary embeds a localized "v2 fallback" label, so it follows language.
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateResourceSummary);
     connect(m_localization, &Localization::languageChanged, this, &AppController::updateEnvironmentSummary);
-    connect(m_settingsWindow.get(), &SettingsWindow::petSelected, this, &AppController::selectPet);
-    connect(m_settingsWindow.get(), &SettingsWindow::importPackageRequested, this, [this] { importPet(false); });
-    connect(m_settingsWindow.get(), &SettingsWindow::importDirectoryRequested, this, [this] { importPet(true); });
-    connect(m_settingsWindow.get(), &SettingsWindow::removePetRequested, this, &AppController::removeSelectedPet);
-    connect(m_settingsWindow.get(), &SettingsWindow::previewAtlasSelected, this, &AppController::loadPreviewAtlas);
-    connect(m_settingsWindow.get(), &SettingsWindow::previewClipSelected, this, &AppController::loadPreviewClip);
-    // About stays a tray item only; the settings page carries the welcome guide,
-    // which had been occupying a permanent tray slot for a first-run artefact.
-    connect(m_settingsWindow.get(), &SettingsWindow::welcomeRequested, this, &AppController::showWelcome);
     connect(m_animationPlayer, &AnimationPlayer::frameReady, m_petWindow.get(), &PetWindow::setFrame);
     connect(m_settings, &AppSettings::animationSpeedChanged, m_animationPlayer, &AnimationPlayer::setSpeedFactor);
     connect(m_petWindow.get(), &PetWindow::dragStarted, m_behavior, &BehaviorController::beginDrag);
@@ -204,7 +194,8 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
         updateEnvironmentSummary();
     });
     connect(m_motionController, &MotionController::reducedMotionChanged, m_animationPlayer, &AnimationPlayer::setReducedMotion);
-    connect(m_motionController, &MotionController::reducedMotionChanged, m_settingsWindow.get(), &SettingsWindow::setReducedMotion);
+    connect(m_motionController, &MotionController::reducedMotionChanged, this,
+            [this](bool reduced) { m_settingsView.setReducedMotion(reduced); });
     connect(m_motionController, &MotionController::reducedMotionChanged, this, [this](bool reduced) {
         // A fidget frozen mid-loop by reduced motion would never emit
         // loopCompleted, so drop it and restore the (now static) Idle frame.
@@ -227,6 +218,53 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
     connect(m_loginItemCoordinator, &LoginItemCoordinator::updateFailed, this, [this](const QString &message) {
         m_notifier->warn(m_localization->text(TextKey::LoginItemErrorTitle), message);
     });
+}
+
+SettingsWindow *AppController::settingsWindow()
+{
+    if (m_settingsWindow) return m_settingsWindow.get();
+
+    m_settingsWindow = std::make_unique<SettingsWindow>(m_settings, m_localization);
+    SettingsWindow *window = m_settingsWindow.get();
+
+    connect(window, &SettingsWindow::resetPositionRequested, m_petWindow.get(), &PetWindow::resetPosition);
+    connect(window, &SettingsWindow::petSelected, this, &AppController::selectPet);
+    connect(window, &SettingsWindow::importPackageRequested, this, [this] { importPet(false); });
+    connect(window, &SettingsWindow::importDirectoryRequested, this, [this] { importPet(true); });
+    connect(window, &SettingsWindow::removePetRequested, this, &AppController::removeSelectedPet);
+    connect(window, &SettingsWindow::previewAtlasSelected, this, &AppController::loadPreviewAtlas);
+    connect(window, &SettingsWindow::previewClipSelected, this, &AppController::loadPreviewClip);
+    // About stays a tray item only; the settings page carries the welcome guide,
+    // which had been occupying a permanent tray slot for a first-run artefact.
+    connect(window, &SettingsWindow::welcomeRequested, this, &AppController::showWelcome);
+
+    // Everything pushed at the window while it did not exist.
+    m_settingsView.attach(window);
+
+    // The preview images are the one thing the proxy does not record, so that a
+    // closed settings window cannot pin a 14MB atlas. Push them from what this
+    // controller already owns.
+    if (m_currentPackage) {
+        configurePetPreview();
+        updateResourceSummary();
+        if (m_currentAtlas) {
+            m_settingsView.setPreviewAtlas(m_currentAtlas,
+                                           m_currentPackage->renderMode == RenderMode::Smooth);
+        }
+    }
+    return window;
+}
+
+OnboardingWindow *AppController::onboardingWindow()
+{
+    if (!m_onboardingWindow) m_onboardingWindow = std::make_unique<OnboardingWindow>(m_localization);
+    return m_onboardingWindow.get();
+}
+
+AboutWindow *AppController::aboutWindow()
+{
+    if (!m_aboutWindow) m_aboutWindow = std::make_unique<AboutWindow>(m_localization);
+    return m_aboutWindow.get();
 }
 
 AppController::~AppController()
@@ -290,7 +328,7 @@ bool AppController::start()
     // on a rollover, so nothing would fill it until the next one otherwise.
     updateEnvironmentSummary();
     m_animationPlayer->setReducedMotion(m_motionController->reducedMotion());
-    m_settingsWindow->setReducedMotion(m_motionController->reducedMotion());
+    m_settingsView.setReducedMotion(m_motionController->reducedMotion());
     m_speechBubble->setAlwaysOnTop(m_settings->alwaysOnTop());
     if (!m_suppressSystemMutations) m_loginItemCoordinator->initialize();
 
@@ -369,7 +407,7 @@ void AppController::refreshPetLibrary()
         selected = m_petLibrary->firstAvailableId();
         if (!selected.isEmpty()) m_settings->setSelectedPetId(selected);
     }
-    m_settingsWindow->setPets(m_petLibrary->pets(), selected);
+    m_settingsView.setPets(m_petLibrary->pets(), selected);
     updatePetMenu(selected);
     selectPet(selected);
 }
@@ -383,10 +421,10 @@ void AppController::selectPet(const QString &id)
         m_animationPlayer->stop();
         m_currentAtlas.clear();
         m_petWindow->setFrame({});
-        m_settingsWindow->setPreviewAtlas({}, true);
-        m_settingsWindow->setPreviewOptions({}, {}, {});
-        m_settingsWindow->setPreviewClipOptions({}, {});
-        m_settingsWindow->setResourceSummary({});
+        m_settingsView.setPreviewAtlas({}, true);
+        m_settingsView.setPreviewOptions({}, {}, {});
+        m_settingsView.setPreviewClipOptions({}, {});
+        m_settingsView.setResourceSummary({});
         m_currentPackage.reset();
         m_clipCache->clear();
         return;
@@ -399,7 +437,7 @@ void AppController::selectPet(const QString &id)
     // calling it here too rebuilt both combo lists twice per pet selection.
     configurePetPreview();
     updateResourceSummary();
-    m_settingsWindow->setPets(m_petLibrary->pets(), id);
+    m_settingsView.setPets(m_petLibrary->pets(), id);
 }
 
 void AppController::loadCurrentVariant()
@@ -411,7 +449,7 @@ void AppController::loadCurrentVariant()
     const QString atlasPath = QDir(m_currentPackage->rootPath).filePath(relativePath);
     const QSharedPointer<PetAtlas> atlas = m_atlasCache->load(atlasPath, &error);
     if (!atlas) {
-        m_settingsWindow->setValidationReport(error, true);
+        m_settingsView.setValidationReport(error, true);
         m_notifier->notifyPetLoadError(m_localization->text(TextKey::PetLoadErrorTitle), error);
         return;
     }
@@ -422,8 +460,8 @@ void AppController::loadCurrentVariant()
     m_behavior->setSnapEdge(m_petWindow->snapEdge());
     applyBehaviorState(m_behavior->state());
     m_animationPlayer->setSpeedFactor(m_settings->animationSpeed());
-    m_settingsWindow->setPreviewAtlas(atlas, m_currentPackage->renderMode == RenderMode::Smooth);
-    m_settingsWindow->setValidationReport({}, false);
+    m_settingsView.setPreviewAtlas(atlas, m_currentPackage->renderMode == RenderMode::Smooth);
+    m_settingsView.setValidationReport({}, false);
     configurePetPreview();
 }
 
@@ -441,7 +479,7 @@ void AppController::configurePetPreview()
     }
     const QString selected = EnvironmentResolver::atlasRelativePath(*m_currentPackage,
                                                                      m_environmentResolver->current());
-    m_settingsWindow->setPreviewOptions(labels, paths, selected);
+    m_settingsView.setPreviewOptions(labels, paths, selected);
 
     QStringList clipLabels;
     QStringList clipKeys;
@@ -463,7 +501,7 @@ void AppController::configurePetPreview()
             clipKeys.append(QStringLiteral("%1|%2").arg(scope, name));
         }
     }
-    m_settingsWindow->setPreviewClipOptions(clipLabels, clipKeys);
+    m_settingsView.setPreviewClipOptions(clipLabels, clipKeys);
 }
 
 // The season/day-night fallback table. Depends only on the package and the UI
@@ -476,7 +514,7 @@ void AppController::updateResourceSummary()
     const QString builtInFallback = m_localization->usesChinese()
         ? QStringLiteral("v2 内置回退")
         : QStringLiteral("v2 fallback");
-    m_settingsWindow->setResourceSummary(
+    m_settingsView.setResourceSummary(
         PetResourceSummary::build(*m_currentPackage, builtInFallback));
 }
 
@@ -498,7 +536,7 @@ void AppController::updateEnvironmentSummary()
     const QString phase = key.phase == TimePhase::Day
         ? (zh ? QStringLiteral("白天") : QStringLiteral("Day"))
         : (zh ? QStringLiteral("夜间") : QStringLiteral("Night"));
-    m_settingsWindow->setEnvironmentSummary(QStringLiteral("%1 · %2  (%3)")
+    m_settingsView.setEnvironmentSummary(QStringLiteral("%1 · %2  (%3)")
                                                 .arg(seasonName(key.season, zh), phase,
                                                      key.combinedName()));
 }
@@ -510,10 +548,10 @@ void AppController::loadPreviewAtlas(const QString &relativePath)
     const QString path = QDir(m_currentPackage->rootPath).filePath(relativePath);
     const QSharedPointer<PetAtlas> atlas = m_atlasCache->load(path, &error);
     if (!atlas) {
-        m_settingsWindow->setValidationReport(error, true);
+        m_settingsView.setValidationReport(error, true);
         return;
     }
-    m_settingsWindow->setPreviewAtlas(atlas,
+    m_settingsView.setPreviewAtlas(atlas,
                                       m_currentPackage->renderMode == RenderMode::Smooth);
 }
 
@@ -533,10 +571,10 @@ void AppController::loadPreviewClip(const QString &key)
     auto clip = QSharedPointer<AnimationClip>::create();
     const QString path = QDir(m_currentPackage->rootPath).filePath(definition->path);
     if (!clip->load(path, definition->durationsMs)) {
-        m_settingsWindow->setValidationReport(clip->errorString(), true);
+        m_settingsView.setValidationReport(clip->errorString(), true);
         return;
     }
-    m_settingsWindow->setPreviewClip(clip,
+    m_settingsView.setPreviewClip(clip,
                                      m_currentPackage->renderMode == RenderMode::Smooth);
 }
 
@@ -697,27 +735,27 @@ void AppController::handlePetClick()
 void AppController::importPet(bool directory)
 {
     const QString path = directory
-        ? QFileDialog::getExistingDirectory(m_settingsWindow.get(),
+        ? QFileDialog::getExistingDirectory(settingsWindow(),
                                             m_localization->text(TextKey::ImportDirectory))
-        : QFileDialog::getOpenFileName(m_settingsWindow.get(),
+        : QFileDialog::getOpenFileName(settingsWindow(),
                                        m_localization->text(TextKey::ImportPackage),
                                        {},
                                        QStringLiteral("Potato Pet (*.potatopet)"));
     if (path.isEmpty()) return;
     const PetImportResult result = m_importer->importPath(path);
     if (!result.success) {
-        m_settingsWindow->setValidationReport(result.error, true);
+        m_settingsView.setValidationReport(result.error, true);
         m_notifier->warn(m_localization->text(TextKey::ImportFailed), result.error);
         return;
     }
     m_settings->setSelectedPetId(result.validation.package.id);
     refreshPetLibrary();
-    m_settingsWindow->setValidationReport(m_localization->text(TextKey::ImportSucceeded), false);
+    m_settingsView.setValidationReport(m_localization->text(TextKey::ImportSucceeded), false);
 }
 
 void AppController::removeSelectedPet()
 {
-    const QString id = m_settingsWindow->selectedPetId();
+    const QString id = settingsWindow()->selectedPetId();
     const PetRecord *record = m_petLibrary->find(id);
     if (!record || record->builtIn) return;
     if (!m_notifier->confirmRemoval(QStringLiteral("Potato"),
@@ -735,26 +773,26 @@ void AppController::removeSelectedPet()
 void AppController::requestSettings()
 {
     if (!m_suppressSystemMutations) MacApplication::activateIgnoringOtherApps();
-    m_settingsWindow->show();
-    m_settingsWindow->raise();
-    m_settingsWindow->activateWindow();
+    settingsWindow()->show();
+    settingsWindow()->raise();
+    settingsWindow()->activateWindow();
     emit settingsRequested();
 }
 
 void AppController::showWelcome()
 {
     if (!m_suppressSystemMutations) MacApplication::activateIgnoringOtherApps();
-    m_onboardingWindow->show();
-    m_onboardingWindow->raise();
-    m_onboardingWindow->activateWindow();
+    onboardingWindow()->show();
+    onboardingWindow()->raise();
+    onboardingWindow()->activateWindow();
 }
 
 void AppController::showAbout()
 {
     if (!m_suppressSystemMutations) MacApplication::activateIgnoringOtherApps();
-    m_aboutWindow->show();
-    m_aboutWindow->raise();
-    m_aboutWindow->activateWindow();
+    aboutWindow()->show();
+    aboutWindow()->raise();
+    aboutWindow()->activateWindow();
 }
 
 void AppController::presentStartupFailure()

@@ -148,6 +148,15 @@ class AppControllerTest final : public QObject
         return true;
     }
 
+    static SettingsWindow *findSettingsWindow()
+    {
+        SettingsWindow *window = nullptr;
+        for (QWidget *candidate : QApplication::topLevelWidgets()) {
+            if (auto *found = qobject_cast<SettingsWindow *>(candidate)) window = found;
+        }
+        return window;
+    }
+
     struct Fixture {
         QTemporaryDir pets;
         QTemporaryDir config;
@@ -411,10 +420,10 @@ private slots:
         AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
         QVERIFY(controller.start());
 
-        SettingsWindow *window = nullptr;
-        for (QWidget *candidate : QApplication::topLevelWidgets()) {
-            if (auto *found = qobject_cast<SettingsWindow *>(candidate)) window = found;
-        }
+        // The window is built on first use, so ask for it: the summary was
+        // recorded while it did not exist and is replayed on attach.
+        controller.requestSettings();
+        SettingsWindow *window = findSettingsWindow();
         QVERIFY2(window, "settings window not found among top-level widgets");
 
         const QStringList variants{
@@ -451,6 +460,107 @@ private slots:
         AppSettings settings(fx.settingsPath());
         AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
         QVERIFY(controller.start()); // empty library must not crash or fail startup
+    }
+
+    // The settings window is five pages of widgets that most sessions never
+    // open, so a started controller must not have built one.
+    void startupDoesNotBuildTheSettingsWindow()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        QVERIFY2(!findSettingsWindow(), "settings window was built before anyone asked for it");
+
+        controller.requestSettings();
+        QVERIFY(findSettingsWindow());
+    }
+
+    // Opening it must produce the same window the eager version did, built from
+    // state pushed at it before it existed.
+    void openingSettingsReplaysTheStateItMissed()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("beta"), QStringLiteral("Beta")));
+        AppSettings settings(fx.settingsPath());
+        settings.setLanguage(AppLanguage::English);
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+
+        // Changed after startup and still with no window in existence, so this
+        // proves the proxy carries late state and not just what start() pushed.
+        fx.system.setReduced(true);
+        settings.setLanguage(AppLanguage::SimplifiedChinese);
+        QVERIFY(!findSettingsWindow());
+
+        controller.requestSettings();
+        SettingsWindow *window = findSettingsWindow();
+        QVERIFY(window);
+
+        // The pet list and its selection arrived during start().
+        QCOMPARE(window->selectedPetId(), settings.selectedPetId());
+        QVERIFY(!window->selectedPetId().isEmpty());
+
+        // The summary is the full table, and in the language chosen after start().
+        const QString summary = window->resourceSummary();
+        QVERIFY(!summary.isEmpty());
+        QVERIFY(summary.contains(QStringLiteral("spring-day")));
+        QVERIFY(summary.contains(QStringLiteral("winter-night")));
+        QVERIFY(summary.contains(QStringLiteral("v2 内置回退")));
+    }
+
+    // Asking twice must hand back the same window rather than stacking a second
+    // widget tree behind the first.
+    void reopeningSettingsReusesTheSameWindow()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+
+        controller.requestSettings();
+        SettingsWindow *first = findSettingsWindow();
+        QVERIFY(first);
+
+        first->hide();
+        controller.requestSettings();
+        QCOMPARE(findSettingsWindow(), first);
+
+        int windows = 0;
+        for (QWidget *candidate : QApplication::topLevelWidgets()) {
+            if (qobject_cast<SettingsWindow *>(candidate)) ++windows;
+        }
+        QCOMPARE(windows, 1);
+    }
+
+    // The other two windows are lazy for the same reason, and neither is on any
+    // path the app takes by itself.
+    void aboutAndWelcomeWindowsAreAlsoBuiltOnDemand()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+
+        const auto countTopLevel = [] {
+            int total = 0;
+            for (QWidget *candidate : QApplication::topLevelWidgets()) {
+                if (candidate->isWindow() && !qobject_cast<QMenu *>(candidate)) ++total;
+            }
+            return total;
+        };
+        const int atStartup = countTopLevel();
+
+        controller.showAbout();
+        QVERIFY(countTopLevel() > atStartup);
     }
 };
 

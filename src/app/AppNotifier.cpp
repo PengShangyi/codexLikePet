@@ -1,13 +1,19 @@
 #include "app/AppNotifier.h"
 
 #include <QMessageBox>
+#include <QWidget>
 #include <QPushButton>
 #include <QSystemTrayIcon>
 
-QtAppNotifier::QtAppNotifier(QSystemTrayIcon *tray, QWidget *dialogParent)
+QtAppNotifier::QtAppNotifier(QSystemTrayIcon *tray, std::function<QWidget *()> dialogParent)
     : m_tray(tray)
-    , m_dialogParent(dialogParent)
+    , m_dialogParent(std::move(dialogParent))
 {
+}
+
+QWidget *QtAppNotifier::dialogParent() const
+{
+    return m_dialogParent ? m_dialogParent() : nullptr;
 }
 
 void QtAppNotifier::notifyPetLoadError(const QString &title, const QString &body)
@@ -23,7 +29,7 @@ AppNotifier::PermissionChoice QtAppNotifier::promptInputPermission(const QString
                                                                    const QString &body,
                                                                    const QString &openLabel)
 {
-    QMessageBox box(QMessageBox::Information, title, body, QMessageBox::Cancel, m_dialogParent);
+    QMessageBox box(QMessageBox::Information, title, body, QMessageBox::Cancel, dialogParent());
     QPushButton *openButton = box.addButton(openLabel, QMessageBox::AcceptRole);
     box.exec();
     return box.clickedButton() == openButton ? PermissionChoice::OpenSettings
@@ -32,15 +38,15 @@ AppNotifier::PermissionChoice QtAppNotifier::promptInputPermission(const QString
 
 void QtAppNotifier::warn(const QString &title, const QString &message)
 {
-    QMessageBox::warning(m_dialogParent, title, message);
+    QMessageBox::warning(dialogParent(), title, message);
 }
 
 bool QtAppNotifier::confirmRemoval(const QString &title, const QString &question)
 {
-    return QMessageBox::question(m_dialogParent, title, question) == QMessageBox::Yes;
+    return QMessageBox::question(dialogParent(), title, question) == QMessageBox::Yes;
 }
 
 void QtAppNotifier::showFatalStartup(const QString &title, const QString &message)
 {
-    QMessageBox::critical(m_dialogParent, title, message);
+    QMessageBox::critical(dialogParent(), title, message);
 }

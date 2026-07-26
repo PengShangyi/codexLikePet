@@ -228,6 +228,8 @@ qt_add_executable(potato_app_controller_test
     ../src/app/AppController.h
     ../src/app/AppNotifier.cpp
     ../src/app/AppNotifier.h
+    ../src/app/SettingsViewState.cpp
+    ../src/app/SettingsViewState.h
     ../src/settings/SettingsWindow.cpp
     ../src/settings/SettingsWindow.h
     ../src/settings/OnboardingWindow.cpp
