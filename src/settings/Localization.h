@@ -33,6 +33,18 @@ enum class TextKey {
     // Rows.
     Opacity, LockPosition, LockPositionNote, CurrentEnvironment, ResourceDetails,
     UseStandardAnimation,
+    // The "Make a pet" authoring guide, opened from the Pet page. The prompt
+    // templates it shows are not keys: they are English in both languages by
+    // design (see PetGuideWindow).
+    PetGuideButton, PetGuideTitle, PetGuideIntro,
+    PetGuideContractHeading, PetGuideContractBody,
+    PetGuideStep1Heading, PetGuideStep1Body,
+    PetGuideStep2Heading, PetGuideStep2Body,
+    PetGuideStep3Heading, PetGuideStep3Body,
+    PetGuideStep4Heading, PetGuideStep4Body,
+    PetGuidePromptLabel, PetGuideRowPromptLabel, PetGuideManifestLabel,
+    PetGuidePlaceholderNote, PetGuideCopy, PetGuideCopied,
+    PetGuideOpenDoc, PetGuideRevealSkill,
 };
 
 class Localization final : public QObject

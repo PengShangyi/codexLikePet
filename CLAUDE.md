@@ -124,8 +124,8 @@ lock (a `QLocalServer` named per uid), and constructs the controller. A second l
 is not an error — it sends `show-settings` to the primary and exits 0, which is the
 only way a menu-bar app with no Dock icon can respond to being opened again.
 
-The settings, about, and welcome windows are built on **first use**, not at startup;
-most sessions never open any of them. `SettingsViewState` (`src/app/`) absorbs the
+The settings, about, welcome, and pet-guide windows are built on **first use**, not at
+startup; most sessions never open any of them. `SettingsViewState` (`src/app/`) absorbs the
 state `AppController` pushes at the settings window in the meantime and replays it on
 attach, so the call sites stay free of null checks. It deliberately records no image
 handles — a proxy that cached a preview atlas would pin 14 MB to avoid building some
@@ -256,6 +256,17 @@ Git LFS, and copied into the app bundle's `Contents/Resources/Pets` at build tim
 Authoring workflow, validation rules, and the bundled Apache-2.0 Hatch Pet skill are
 documented in `docs/PET_AUTHORING.md`. The bundled skill is read-only app content and
 is never installed into `~/.codex`.
+
+`PetGuideWindow` (`src/settings/`) is the in-app version of that, opened from
+"Make a pet…" beside Import on the Pet page: the atlas contract, copyable
+image-model prompt templates, and buttons onto the bundled doc and skill. Its
+prompt templates and `pet.json` sample are deliberately **English in both UI
+languages** — they are model input and file keys, not prose — while every label
+around them is a `TextKey`. It states outright that no image model returns a
+pixel-exact atlas in one shot, so the prompts target a base character and
+per-row strips and the assembly step is handed to the skill. Keep that framing
+if you edit the copy: promising a one-shot atlas is the one thing that would
+make the guide actively mislead.
 
 **One deliberate deviation to know about before you "fix" it.** The left and right
 edge animations are turned off at the top of `AppController::applyBehaviorState`

@@ -221,7 +221,7 @@ private slots:
         // Localization::text() has no default: label, so -Wswitch catches a new
         // TextKey with no case -- but the fallthrough returns an empty string, and
         // nothing else would notice. Sweep the whole enum for both languages.
-        const int lastKey = static_cast<int>(TextKey::UseStandardAnimation);
+        const int lastKey = static_cast<int>(TextKey::PetGuideRevealSkill);
         for (int raw = 0; raw <= lastKey; ++raw) {
             const auto key = static_cast<TextKey>(raw);
             settings.setLanguage(AppLanguage::English);

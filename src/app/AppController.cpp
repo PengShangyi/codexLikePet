@@ -9,6 +9,7 @@
 #include "ui/Theme.h"
 #include "settings/OnboardingWindow.h"
 #include "settings/AboutWindow.h"
+#include "settings/PetGuideWindow.h"
 #include "pet/AnimationPlayer.h"
 #include "pet/AnimationClip.h"
 #include "pet/AtlasCache.h"
@@ -242,6 +243,7 @@ SettingsWindow *AppController::settingsWindow()
     // About stays a tray item only; the settings page carries the welcome guide,
     // which had been occupying a permanent tray slot for a first-run artefact.
     connect(window, &SettingsWindow::welcomeRequested, this, &AppController::showWelcome);
+    connect(window, &SettingsWindow::petGuideRequested, this, &AppController::showPetGuide);
 
     // Everything pushed at the window while it did not exist.
     m_settingsView.attach(window);
@@ -270,6 +272,12 @@ AboutWindow *AppController::aboutWindow()
 {
     if (!m_aboutWindow) m_aboutWindow = std::make_unique<AboutWindow>(m_localization);
     return m_aboutWindow.get();
+}
+
+PetGuideWindow *AppController::petGuideWindow()
+{
+    if (!m_petGuideWindow) m_petGuideWindow = std::make_unique<PetGuideWindow>(m_localization);
+    return m_petGuideWindow.get();
 }
 
 AppController::~AppController()
@@ -856,6 +864,14 @@ void AppController::showAbout()
     aboutWindow()->show();
     aboutWindow()->raise();
     aboutWindow()->activateWindow();
+}
+
+void AppController::showPetGuide()
+{
+    if (!m_suppressSystemMutations) MacApplication::activateIgnoringOtherApps();
+    petGuideWindow()->show();
+    petGuideWindow()->raise();
+    petGuideWindow()->activateWindow();
 }
 
 void AppController::presentStartupFailure()

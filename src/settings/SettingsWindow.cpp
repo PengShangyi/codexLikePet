@@ -171,8 +171,13 @@ void SettingsWindow::buildPetPage()
     m_removeButton = new QPushButton(buttonStrip);
     m_removeButton->setObjectName(QStringLiteral("removeButton"));
     m_removeButton->setEnabled(false);
+    // Sits with the import buttons because it answers the question they raise:
+    // importing a pet is no help until you have one to import.
+    m_petGuideButton = new QPushButton(buttonStrip);
+    m_petGuideButton->setObjectName(QStringLiteral("petGuideButton"));
     buttonLayout->addWidget(m_importButton);
     buttonLayout->addWidget(m_removeButton);
+    buttonLayout->addWidget(m_petGuideButton);
     buttonLayout->addStretch();
     petCard->addContent(buttonStrip);
     page->addCard(petCard);
@@ -461,6 +466,7 @@ void SettingsWindow::bindSettings()
             this,
             &SettingsWindow::importDirectoryRequested);
     connect(m_removeButton, &QPushButton::clicked, this, &SettingsWindow::removePetRequested);
+    connect(m_petGuideButton, &QPushButton::clicked, this, &SettingsWindow::petGuideRequested);
     connect(m_petCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
         const QString id = index >= 0 ? m_petCombo->itemData(index).toString() : QString();
         const bool builtIn = index >= 0 && m_petCombo->itemData(index, Qt::UserRole + 1).toBool();
@@ -642,6 +648,7 @@ void SettingsWindow::retranslate()
     }
     m_importButton->setText(m_localization->text(TextKey::ImportPet));
     m_removeButton->setText(m_localization->text(TextKey::RemovePet));
+    m_petGuideButton->setText(m_localization->text(TextKey::PetGuideButton));
     if (QAction *action = m_importButton->menu()->findChild<QAction *>(QStringLiteral("importPackageAction"))) action->setText(m_localization->text(TextKey::ImportPackage));
     if (QAction *action = m_importButton->menu()->findChild<QAction *>(QStringLiteral("importDirectoryAction"))) action->setText(m_localization->text(TextKey::ImportDirectory));
     m_resourceSummary->setPlaceholderText(m_localization->text(TextKey::ResourceFallbacks));
@@ -676,10 +683,11 @@ void SettingsWindow::retranslate()
     m_languageCombo->addItems({m_localization->text(TextKey::SystemLanguage), m_localization->text(TextKey::English), m_localization->text(TextKey::SimplifiedChinese)});
     m_languageCombo->setCurrentIndex(static_cast<int>(m_settings->language()));
 
-    // The five controls that are not row-owned still need naming by hand; every
-    // other control gets its accessible name from its SettingsRow.
+    // The controls that are not row-owned still need naming by hand; every other
+    // control gets its accessible name from its SettingsRow.
     m_importButton->setAccessibleName(m_localization->text(TextKey::ImportPet));
     m_removeButton->setAccessibleName(m_localization->text(TextKey::RemovePet));
+    m_petGuideButton->setAccessibleName(m_localization->text(TextKey::PetGuideButton));
     m_resetButton->setAccessibleName(m_localization->text(TextKey::ResetPosition));
     m_welcomeButton->setAccessibleName(m_localization->text(TextKey::WelcomeMenuItem));
     m_resourceSummary->setAccessibleName(m_localization->text(TextKey::ResourceFallbacks));

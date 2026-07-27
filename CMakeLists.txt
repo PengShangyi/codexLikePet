@@ -211,6 +211,7 @@ potato_add_library(potato_app
             src/settings/SettingsWindow.cpp src/settings/SettingsWindow.h
             src/settings/OnboardingWindow.cpp src/settings/OnboardingWindow.h
             src/settings/AboutWindow.cpp src/settings/AboutWindow.h
+            src/settings/PetGuideWindow.cpp src/settings/PetGuideWindow.h
             src/settings/PetPreviewWidget.cpp src/settings/PetPreviewWidget.h
             src/pet/PetWindow.cpp src/pet/PetWindow.h
             src/pet/AnimationPlayer.cpp src/pet/AnimationPlayer.h

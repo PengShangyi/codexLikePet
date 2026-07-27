@@ -14,6 +14,7 @@
 #include <QPixmap>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QToolButton>
@@ -178,6 +179,7 @@ private slots:
         SettingsWindow window(&settings, &localization);
 
         for (const QString &name : {QStringLiteral("importButton"), QStringLiteral("removeButton"),
+                                    QStringLiteral("petGuideButton"),
                                     QStringLiteral("resetPositionButton"),
                                     QStringLiteral("welcomeButton")}) {
             auto *button = window.findChild<QPushButton *>(name);
@@ -187,6 +189,31 @@ private slots:
         auto *summary = window.findChild<QPlainTextEdit *>(QStringLiteral("resourceSummary"));
         QVERIFY(summary);
         QVERIFY(!summary->accessibleName().isEmpty());
+    }
+
+    // The guide is built on first use by AppController, so the window's whole
+    // contribution is the button and the signal. Placed with the import buttons
+    // deliberately: it answers the question they raise.
+    void petGuideButtonSitsWithImportAndAsksForTheGuide()
+    {
+        QTemporaryDir temp;
+        AppSettings settings(temp.filePath(QStringLiteral("settings.ini")));
+        settings.setLanguage(AppLanguage::English);
+        Localization localization(&settings);
+        SettingsWindow window(&settings, &localization);
+
+        auto *guide = window.findChild<QPushButton *>(QStringLiteral("petGuideButton"));
+        QVERIFY(guide);
+        auto *import = window.findChild<QPushButton *>(QStringLiteral("importButton"));
+        QVERIFY(import);
+        QCOMPARE(guide->parentWidget(), import->parentWidget());
+        // Always available: it is the one control here that works before a pet
+        // exists, so it must not follow the selection the way Remove does.
+        QVERIFY(guide->isEnabled());
+
+        QSignalSpy spy(&window, &SettingsWindow::petGuideRequested);
+        guide->click();
+        QCOMPARE(spy.count(), 1);
     }
 
     // Regression: the motion, hemisphere, and language combos get their items in

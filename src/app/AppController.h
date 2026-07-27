@@ -25,6 +25,7 @@ class Localization;
 class SettingsWindow;
 class OnboardingWindow;
 class AboutWindow;
+class PetGuideWindow;
 class PetLibrary;
 class PetPackageImporter;
 class AtlasCache;
@@ -84,6 +85,7 @@ public:
     void requestSettings();
     void showAbout();
     void showWelcome();
+    void showPetGuide();
     void presentStartupFailure();
     // Puts the pet away or brings it back, as the tray item does. Public because it
     // is a command like requestSettings(), and because hiding is the one quiet reason
@@ -129,6 +131,7 @@ private:
     SettingsWindow *settingsWindow();
     OnboardingWindow *onboardingWindow();
     AboutWindow *aboutWindow();
+    PetGuideWindow *petGuideWindow();
     void loadPreviewClip(const QString &key);
     QSharedPointer<AnimationClip> loadClip(const QString &name);
     bool playClip(const QString &name, bool restart = true);
@@ -175,13 +178,14 @@ private:
     QAction *m_quitAction;
     AppSettings *m_settings;
     Localization *m_localization;
-    // All three are built on first use, not at startup: between them they are
-    // five settings pages, a preview widget and two more windows, and most
+    // All four are built on first use, not at startup: between them they are
+    // five settings pages, a preview widget and three more windows, and most
     // sessions never open any of them. m_settingsView absorbs the state pushed
     // at the settings window in the meantime.
     std::unique_ptr<SettingsWindow> m_settingsWindow;
     std::unique_ptr<OnboardingWindow> m_onboardingWindow;
     std::unique_ptr<AboutWindow> m_aboutWindow;
+    std::unique_ptr<PetGuideWindow> m_petGuideWindow;
     SettingsViewState m_settingsView;
     std::unique_ptr<PetWindow> m_petWindow;
     PetLibrary *m_petLibrary;

@@ -61,6 +61,9 @@ signals:
     void importPackageRequested();
     void importDirectoryRequested();
     void removePetRequested();
+    // Opens the authoring guide. Next to Import because "how do I make one?" is
+    // the question the import buttons raise and cannot answer.
+    void petGuideRequested();
     void petSelected(const QString &id);
     void previewAtlasSelected(const QString &relativePath);
     void previewClipSelected(const QString &key);
@@ -116,6 +119,7 @@ private:
     QComboBox *m_petCombo;
     QPushButton *m_importButton;
     QPushButton *m_removeButton;
+    QPushButton *m_petGuideButton;
     PetPreviewWidget *m_preview;
     InlineBanner *m_validationBanner;
     Disclosure *m_resourceDetails;

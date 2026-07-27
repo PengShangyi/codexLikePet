@@ -114,6 +114,27 @@ QString Localization::text(TextKey key) const
     case TextKey::CurrentEnvironment: return zh ? QStringLiteral("当前") : QStringLiteral("Now");
     case TextKey::ResourceDetails: return zh ? QStringLiteral("资源详情") : QStringLiteral("Resource details");
     case TextKey::UseStandardAnimation: return zh ? QStringLiteral("使用标准动作") : QStringLiteral("Use standard animation");
+    case TextKey::PetGuideButton: return zh ? QStringLiteral("制作宠物…") : QStringLiteral("Make a pet…");
+    case TextKey::PetGuideTitle: return zh ? QStringLiteral("制作 Potato 宠物") : QStringLiteral("Make a Potato pet");
+    case TextKey::PetGuideIntro: return zh ? QStringLiteral("用 gpt-image-2 之类的图像模型生成美术素材，拼装成一张精灵图集，再从这里导入。下面的提示词模版特意保留英文——图像模型对英文提示词的还原最稳定。") : QStringLiteral("Generate the artwork with an image model such as gpt-image-2, assemble it into one sprite atlas, then import it here. The prompt templates below are English on purpose: image models follow English prompts most reliably.");
+    case TextKey::PetGuideContractHeading: return zh ? QStringLiteral("Potato 需要什么") : QStringLiteral("What Potato needs");
+    case TextKey::PetGuideContractBody: return zh ? QStringLiteral("一张透明的 PNG 或 WebP 图集，尺寸必须正好是 1536×2288 像素：8 列 × 11 行，每格 192×208。第 0–8 行是动作状态，第 9–10 行是 16 个朝向。每行末尾未使用的格子必须完全透明，清单中的 spriteVersionNumber 必须为 2。") : QStringLiteral("One transparent PNG or WebP atlas, exactly 1536×2288 pixels: an 8-column × 11-row grid of 192×208 cells. Rows 0–8 are animation states, rows 9–10 are the 16 look directions. Unused cells at the end of a row must be fully transparent, and the manifest must set spriteVersionNumber to 2.");
+    case TextKey::PetGuideStep1Heading: return zh ? QStringLiteral("1. 生成角色形象") : QStringLiteral("1. Generate the character");
+    case TextKey::PetGuideStep1Body: return zh ? QStringLiteral("先生成一张宠物静止站立的参考图。后面每一行动作都以它为基准，请保留到图集完成为止——它是让角色在每一帧都保持辨识度的关键。") : QStringLiteral("Start with one reference image of the pet standing at rest. Every animation row is generated from it, so keep it until the atlas is finished: it is what keeps the character recognisable across every frame.");
+    case TextKey::PetGuideStep2Heading: return zh ? QStringLiteral("2. 生成动作行") : QStringLiteral("2. Generate the animation rows");
+    case TextKey::PetGuideStep2Body: return zh ? QStringLiteral("每行单独生成一条横向长条，每次都附上第 1 步的角色图作为参考。各行与帧数：idle 6、running-right 8、running-left 8、waving 4、jumping 5、failed 8、waiting 6、running 6、review 6。最后是两行朝向，各 8 帧，从 000°（正上方）开始顺时针每 22.5° 一格。") : QStringLiteral("Generate one horizontal strip per row, attaching the step 1 character as a reference every time. Rows and frame counts: idle 6, running-right 8, running-left 8, waving 4, jumping 5, failed 8, waiting 6, running 6, review 6. Then two look rows of 8 frames each, turning clockwise in 22.5° steps from 000° (up).");
+    case TextKey::PetGuideStep3Heading: return zh ? QStringLiteral("3. 拼装与校验") : QStringLiteral("3. Assemble and validate");
+    case TextKey::PetGuideStep3Body: return zh ? QStringLiteral("没有哪个图像模型能一次就返回像素精确的 1536×2288 图集，所以拼装这一步要自己做：切帧、抠掉背景色、按网格摆放每一格，再校验结果。随附的 Hatch Pet 技能可以完成全过程；把它复制到 ~/.codex/skills/hatch-pet 即可配合 Codex 使用。Potato 不会替你安装。") : QStringLiteral("No image model reliably returns a pixel-exact 1536×2288 atlas in one shot, so the assembly step is yours: cut the frames, key out the background, place every cell on the grid, and validate the result. The bundled Hatch Pet skill does all of that; copy it to ~/.codex/skills/hatch-pet to use it with Codex. Potato never installs it for you.");
+    case TextKey::PetGuideStep4Heading: return zh ? QStringLiteral("4. 打包与导入") : QStringLiteral("4. Package and import");
+    case TextKey::PetGuideStep4Body: return zh ? QStringLiteral("把 pet.json 与 spritesheet.webp 放进同一个文件夹，然后用“导入宠物 › 导入资源目录”。要分享时，把文件夹内容打包成 zip（pet.json 位于压缩包根目录）并把扩展名改为 .potatopet。季节变体与边缘动画是可选的，写在 potato.json 里——详见创作指南。") : QStringLiteral("Put pet.json beside spritesheet.webp in one folder, then use Import Pet › Import resource directory. To share it, zip the folder's contents with pet.json at the archive root and rename the archive to .potatopet. Seasonal variants and edge animations are optional and live in potato.json — see the authoring guide.");
+    case TextKey::PetGuidePromptLabel: return zh ? QStringLiteral("提示词模版 —— 粘贴到 gpt-image-2") : QStringLiteral("Prompt template — paste into gpt-image-2");
+    case TextKey::PetGuideRowPromptLabel: return zh ? QStringLiteral("动作行提示词模版 —— 每次生成一行，并附上第 1 步的角色图") : QStringLiteral("Row prompt template — one row per run, with the step 1 image attached");
+    case TextKey::PetGuideManifestLabel: return zh ? QStringLiteral("最简 pet.json") : QStringLiteral("Minimal pet.json");
+    case TextKey::PetGuidePlaceholderNote: return zh ? QStringLiteral("发送前请替换 <name>、<style>、<description>、<state> 与 <count>；尺寸与颜色数值请原样保留。") : QStringLiteral("Replace <name>, <style>, <description>, <state>, and <count> before sending. Leave the sizes and colour values exactly as written.");
+    case TextKey::PetGuideCopy: return zh ? QStringLiteral("复制") : QStringLiteral("Copy");
+    case TextKey::PetGuideCopied: return zh ? QStringLiteral("已复制") : QStringLiteral("Copied");
+    case TextKey::PetGuideOpenDoc: return zh ? QStringLiteral("打开创作指南") : QStringLiteral("Open authoring guide");
+    case TextKey::PetGuideRevealSkill: return zh ? QStringLiteral("显示 Hatch Pet 技能") : QStringLiteral("Reveal Hatch Pet skill");
     }
     return {};
 }
