@@ -47,8 +47,15 @@ directly, name it:
 ./build/tests/potato_core_test                        # every class in the binary
 ```
 
-Set `POTATO_QT_ROOT` if Qt is not on the default CMake prefix path. Builds are
-arm64-only and out-of-source; generated files are never committed.
+Set `POTATO_QT_ROOT` — an environment variable, not a `-D` cache entry — if Qt is
+not on the default CMake prefix path. Builds are arm64-only and out-of-source;
+generated files are never committed.
+
+The API floor is Qt 6.8 and nothing enforces it while you iterate. A newer local Qt
+(6.10 on the default Homebrew prefix here) compiles a 6.9-only call without
+complaint, and the failure then surfaces at the release gate, which builds from
+scratch with LTO before it gets to your file. Configure with
+`-DPOTATO_REQUIRE_EXACT_QT=ON` to have that caught at configure time instead.
 
 ## Memory lifetime
 
@@ -79,6 +86,11 @@ licenses, ad-hoc signs, and verifies an arm64-only bundle. Configure with
 `-DPOTATO_REQUIRE_EXACT_QT=ON` to enforce the exact Qt pin. Local iteration with a
 newer Qt 6 is fine but is **not** the release artifact.
 
+It builds into `build-release-6.8.8` and ships `dist/Potato.app`, and it runs CTest
+**serially** where developers use the parallel `check` target — parallel load is the
+one thing that perturbs the suite's `qWait`/`QTRY_*` assertions, and this is the gate.
+A new timing-sensitive test has to pass both ways.
+
 `scripts/check-runtime.sh /abs/path/to/Potato.app` verifies idle limits in two phases
 — shipped defaults, and both appearance sliders at maximum — and fails at 2% idle CPU
 on the defaults, 64 MiB peak physical footprint, or any open network socket.
@@ -98,6 +110,19 @@ on a busy machine even while the pet animates.
 `AppController` (`src/app/`) owns the application lifecycle and is the single wiring
 point: it constructs and connects otherwise-isolated services, the tray menu, and the
 pet window. Platform adapters never own settings or pet resources — they are injected.
+
+Injection goes through `AppController::Dependencies`, where **every field is
+optional**: an unset pointer or callback falls back to the real macOS implementation,
+so production still writes `AppController(mode)` while `potato_app_controller_test`
+drives the whole wiring headlessly. Injected objects belong to the caller and are
+never parented to the controller; only the defaults it created are its to own. Add a
+new boundary to that struct rather than reaching for the platform directly, or the
+composition test loses the seam.
+
+`main.cpp` is deliberately thin: it sets the org/app names, takes the `SingleInstance`
+lock (a `QLocalServer` named per uid), and constructs the controller. A second launch
+is not an error — it sends `show-settings` to the primary and exits 0, which is the
+only way a menu-bar app with no Dock icon can respond to being opened again.
 
 The settings, about, and welcome windows are built on **first use**, not at startup;
 most sessions never open any of them. `SettingsViewState` (`src/app/`) absorbs the
@@ -120,6 +145,11 @@ never invents transitions:
   validated Potato clip. Reduced motion freezes either source on its first frame.
   `TypingAnimationDriver` sits beside it and owns the keystroke-driven typing
   animation (hold the clip at rest, advance one press per key, relax after a pause).
+- **`IdleActivityScheduler`** (`src/pet/`) — owns *only* the timing and selection of
+  idle fidgets, with both hooks injectable (`IdleFidgetPolicy`) so tests are
+  deterministic. `AppController` arms it exclusively while the resolved behavior is
+  Idle and motion is allowed, so behavior priority, reduced motion, visibility, and
+  sleep stay decided in one place rather than being re-litigated here.
 - **Resource pipeline** (`src/resources/`) — `PetPackageValidator` owns contract
   validation, `ArchiveExtractor` owns hostile-archive boundaries (zip via vendored
   miniz), `PetStore` owns staged atomic install; `PetLibrary` lists pets and
@@ -148,7 +178,9 @@ never invents transitions:
   from timestamps only.
 - **Boundaries with test doubles**: `InputActivitySource`, `SystemActivitySource`
   (`src/platform/`), `LoginItemController` (`src/login/`, macOS Service Management —
-  no custom LaunchAgent), and `QuoteProvider` (`src/quotes/`, local-only).
+  no custom LaunchAgent), `QuoteProvider` (`src/quotes/`, local-only), and
+  `AppNotifier` (`src/app/`), which is the single boundary for every user-facing
+  alert — so no failure is surfaced silently, and no test blocks on a modal.
 
 Runtime resource discipline (enforced by design): decode lazily, retain at most two
 atlas cache entries (`AtlasCache`) and a bounded clip cache (`ClipCache`), clear
@@ -176,6 +208,25 @@ teardown path and a per-source mask to survive interleaving (lock, then display 
 then display wake while still locked). All of these notifications are edge-triggered
 and nothing replays them, so launching while the display is already asleep starts out
 believing it is awake.
+
+**Run modes.** `AppRunMode::RuntimeCheck`, set by the `--potato-runtime-check`
+argument, exists for `scripts/check-runtime.sh`. It does two things. `main.cpp` names
+the application `PotatoRuntimeCheck`, which gives the probe its own preference domain
+and Application Support directory instead of the user's; and `m_suppressSystemMutations`
+skips the accessory activation policy, login-item registration, first-run onboarding,
+and every `activateIgnoringOtherApps`. A new call that changes system state or steals
+focus must be gated the same way — ungated, the acceptance probe starts editing the
+real machine it is measuring.
+
+**Launch at login** has two implementations because the deployment target predates the
+modern API. On macOS 13+ `MacLoginItemController` registers the main app through
+`SMAppService mainAppService`. On macOS 12 it falls back to the deprecated
+`SMLoginItemSetEnabled`, which needs a helper *inside* the bundle — hence the second
+bundle target, `PotatoLoginHelper` (`src/login/LoginHelperMain.mm`,
+`cmake/LoginHelper-Info.plist.in`), copied post-build into
+`Contents/Library/LoginItems/` and asserted by `package-local.sh`. Its whole job is to
+open the main app if no `com.peng.potato` instance is already running. `LoginItemCoordinator`
+sits above the boundary and keeps the setting and the registration in agreement.
 
 **Validation depth.** Decoding every atlas and clip is the entire cost of package
 validation: for the built-in pet, 23 ms per atlas against 0.18 ms for the occupancy
@@ -206,6 +257,16 @@ Authoring workflow, validation rules, and the bundled Apache-2.0 Hatch Pet skill
 documented in `docs/PET_AUTHORING.md`. The bundled skill is read-only app content and
 is never installed into `~/.codex`.
 
+**One deliberate deviation to know about before you "fix" it.** The left and right
+edge animations are turned off at the top of `AppController::applyBehaviorState`
+(`src/app/AppController.cpp`, marked `TEMP:`, with the original combined branch kept
+verbatim in a comment directly below). The pet still snaps to the side edges; it just
+renders the idle loop there. Everything else still supports them — the validator
+accepts `edge-left`/`edge-right`, `PetResourceSummary` reports them,
+`docs/PET_AUTHORING.md` documents them, and the built-in pet ships all sixteen
+`*-edge-left`/`*-edge-right` clips through Git LFS. So those assets are not dead
+weight to prune, and the idle fall-through is not a bug to repair unasked.
+
 ## Conventions
 
 - Objective-C++ (`.mm`) is used only for macOS system adapters; keep Qt/C++ logic out
@@ -221,8 +282,19 @@ is never installed into `~/.codex`.
   class in its own file, end it with a `QObject *create<Class>()` factory instead of
   `QTEST_MAIN`, and register it in the group's `tests/groups/*_main.cpp` and its
   `potato_add_grouped_tests` list. Only give a test its own binary when it needs
-  something no group has — `potato_pet_overlay_test` is separate because it must *not*
-  run offscreen.
+  something no group has, which today is four: `potato_pet_overlay_test` must *not*
+  run offscreen (it `QSKIP`s unless the cocoa platform is live), `potato_behavior_test`
+  links the AppKit overlay, `potato_builtin_pet_test` is decode-bound against the real
+  shipped assets so `ctest -j` should keep spreading it, and
+  `potato_app_controller_test` links `potato_app`.
+- A test that needs a *valid* atlas or clip takes one from `TestAtlas`
+  (`tests/support/AtlasFixture.h`), which encodes each shape once per process and
+  caches the bytes: building the 1536x2288 `QImage` costs 0.30 ms and encoding it
+  costs 69 ms, so a hand-rolled generator per file is the whole cost of the suite.
+  Deliberately *invalid* fixtures (wrong size, an opaque unused cell, a nine-frame
+  clip) still stay inline in the test that wants them. A test that reads the real
+  shipped assets gets the repository root from the `POTATO_SOURCE_DIR` compile
+  definition rather than walking up from the binary.
 - Low-level modules come from the shared static libraries in the root `CMakeLists.txt`
   (`potato_settings_core`, `potato_theme`, `potato_ui`, `potato_environment`,
   `potato_geometry`, `potato_atlas`, `potato_policy`, `potato_package`,
@@ -241,7 +313,15 @@ is never installed into `~/.codex`.
 - Warnings are errors-adjacent: everything builds with `-Wall -Wextra -Wpedantic`.
 - Settings live behind `AppSettings` — including the pet window position and the
   settings window geometry. Never reach for a bare `QSettings()`; that bypasses the
-  injected store and makes tests write to real macOS preference domains.
+  injected store and makes tests write to real macOS preference domains. When tooling
+  has to name the domain from outside, it is `com.com-peng.Potato`: the organization
+  domain `com.peng` is already reverse-DNS and Qt's macOS backend transforms it a
+  second time, and keys flatten from `group/key` to `group.key`. Guessing the
+  untransformed spelling is why the runtime probe once cleaned up nothing.
+- User-facing text is a `TextKey` enum plus one switch in `Localization.cpp` covering
+  English and Simplified Chinese. There is no `tr()`, no `.ts` catalogue, and no
+  `QTranslator` — adding a string means adding a key and both languages, and
+  `usesChinese()` is cached because a full retranslate asks for about seventy of them.
 - Colors, metrics, and fonts live in `Theme`. Do not call `setStyleSheet` outside
   `Theme::styleSheet()`, and do not add a QSS rule that matches `PetPreviewWidget` —
   a match makes `QStyleSheetStyle` set `WA_StyledBackground` on it, which paints a
@@ -252,8 +332,11 @@ is never installed into `~/.codex`.
   warning.
 - **Ownership.** QObjects use Qt parent/child; `std::unique_ptr` owns the top-level
   windows and the non-QObject services; `QSharedPointer` owns decoded atlases and
-  clips, which are shared between the caches, the player, and the preview. There is
-  no bare `delete` in the codebase and no reason to add one.
+  clips, which are shared between the caches, the player, and the preview. The
+  codebase's one `delete` is the `QImage` cleanup callback in `cellViewOf`
+  (`PetAtlas.cpp`), which frees the retained copy that keeps a frame view's pixels
+  alive — it is load-bearing for the rule below, not a leftover. Adding a second one
+  anywhere else is a mistake.
 - **Frames are views, not copies.** Anything that runs per animation frame — or worse,
   per paint — takes `PetAtlas::frameView()` / `AnimationClip::frameView()`, which point
   into the owner's pixels. `frame()` still copies 156KB and is for callers that need an
