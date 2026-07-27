@@ -206,10 +206,26 @@ void SettingsWindow::buildPetPage()
     m_resourceSummary->setObjectName(QStringLiteral("resourceSummary"));
     m_resourceSummary->setReadOnly(true);
     m_resourceSummary->setFrameShape(QFrame::NoFrame);
+    // Fixed rather than capped: the table scrolls internally, and on a page whose
+    // preview is already claiming the leftover height a floor is the only thing
+    // keeping the box from opening as a single-line sliver.
+    m_resourceSummary->setMinimumHeight(105);
     m_resourceSummary->setMaximumHeight(105);
     m_resourceDetails->contentLayout()->addWidget(m_resourceSummary);
 
     page->addContent(m_resourceDetails);
+
+    // This section sits at the bottom of the page, under a preview that absorbs
+    // the leftover height, so at the smallest window everything it reveals starts
+    // below the fold: expanding it looked like nothing more than a scrollbar
+    // appearing. Deferred by one turn because the offset to scroll to only exists
+    // once the reveal's posted LayoutRequest has been through the column.
+    connect(m_resourceDetails, &Disclosure::expandedChanged, this, [this, page](bool expanded) {
+        if (!expanded) return;
+        QTimer::singleShot(0, this, [this, page] {
+            if (m_resourceDetails->isExpanded()) page->scrollToContent(m_resourceDetails);
+        });
+    });
 }
 
 void SettingsWindow::buildAppearancePage()
@@ -409,8 +425,26 @@ void SettingsWindow::bindSettings()
     connect(m_typingCheck, &QCheckBox::toggled, m_settings, &AppSettings::setTypingDetectionEnabled);
     // Two-way: a failed login-item registration or a denied Input Monitoring prompt
     // reverts the setting, and the box has to follow it back.
-    connect(m_settings, &AppSettings::launchAtLoginChanged, m_loginCheck, &QCheckBox::setChecked);
-    connect(m_settings, &AppSettings::typingDetectionEnabledChanged, m_typingCheck, &QCheckBox::setChecked);
+    //
+    // Re-seeded from AppSettings under a blocker, never from the signal argument.
+    // The revert is emitted from *inside* this signal's own delivery, and a nested
+    // emission does not rewrite the outer frame's argument -- so the outer delivery
+    // arrives after the revert still carrying the rejected value. Trusting it
+    // re-checked the box, whose toggled() wrote the rejection straight back, and
+    // the whole reject-and-warn path ran again: one modal per round, unbounded,
+    // which is what made Cancel on the Input Monitoring dialog reopen it forever.
+    // Blocking the box on the way in is the other half; without it the correction
+    // itself re-arms the path it is correcting.
+    const auto syncCheck = [](QCheckBox *box, bool value) {
+        const QSignalBlocker blocker(box);
+        box->setChecked(value);
+    };
+    connect(m_settings, &AppSettings::launchAtLoginChanged, this, [this, syncCheck] {
+        syncCheck(m_loginCheck, m_settings->launchAtLogin());
+    });
+    connect(m_settings, &AppSettings::typingDetectionEnabledChanged, this, [this, syncCheck] {
+        syncCheck(m_typingCheck, m_settings->typingDetectionEnabled());
+    });
     connect(m_motionCombo, &QComboBox::currentIndexChanged, this, [this](int value) { m_settings->setMotionPreference(static_cast<MotionPreference>(value)); });
     connect(m_hemisphereCombo, &QComboBox::currentIndexChanged, this, [this](int value) { m_settings->setHemisphere(static_cast<Hemisphere>(value)); });
     connect(m_dayStart, &QTimeEdit::timeChanged, m_settings, &AppSettings::setDayStartsAt);

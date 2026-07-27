@@ -4,6 +4,7 @@
 #include "ui/Theme.h"
 
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QVBoxLayout>
 
 SettingsPage::SettingsPage(QWidget *parent)
@@ -53,6 +54,14 @@ void SettingsPage::addContent(QWidget *widget)
 void SettingsPage::addStretchingContent(QWidget *widget)
 {
     m_column->insertWidget(m_column->count() - 1, widget, 1);
+}
+
+void SettingsPage::scrollToContent(QWidget *widget)
+{
+    QWidget *content = m_scroll->widget();
+    if (!widget || !content || !content->isAncestorOf(widget)) return;
+    const int top = widget->mapTo(content, QPoint(0, 0)).y();
+    m_scroll->verticalScrollBar()->setValue(qMax(0, top - Theme::Metrics::pageMargin));
 }
 
 void SettingsPage::retranslate()

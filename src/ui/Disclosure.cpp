@@ -59,7 +59,15 @@ void Disclosure::setExpanded(bool expanded)
         return;
     }
     m_content->setVisible(expanded);
+    // Place the content before anything can paint it. setVisible() activates the
+    // shown widget's own layout, not ours, and ours only re-runs on the posted
+    // LayoutRequest -- while a hidden item is skipped by every layout pass, so
+    // until now the content has never been given a geometry at all and still
+    // carries its construction-time rect. That gap is long enough to flash the
+    // whole section at the top of the card before it drops into place.
+    if (expanded) layout()->activate();
     m_header->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+    emit expandedChanged(expanded);
 }
 
 void Disclosure::retranslate()

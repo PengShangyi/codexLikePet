@@ -215,6 +215,10 @@ private:
     ThemeWatcher *m_bubbleTheme = nullptr;
     QTimer *m_clickCompletionTimer;
     bool m_suppressSystemMutations = false;
+    // Held across the Input Monitoring prompt, which runs a nested event loop: a
+    // wake delivered inside it comes back through resumePetActivity() and would
+    // stack a second copy of the same dialog.
+    bool m_resolvingInputPermission = false;
     QFlags<QuietReason> m_quietReasons;
     QUuid m_activeQuoteRequest;
 };

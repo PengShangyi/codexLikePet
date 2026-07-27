@@ -30,6 +30,12 @@ public:
 
     void retranslate();
 
+signals:
+    // The revealed rows can land outside a scrolled page, so whoever placed this
+    // section has to be told when it opens. Emitted for a programmatic
+    // setExpanded() as well as for a click on the header.
+    void expandedChanged(bool expanded);
+
 private:
     Localization *m_localization;
     TextKey m_titleKey;

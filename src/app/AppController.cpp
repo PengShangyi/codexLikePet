@@ -426,21 +426,29 @@ void AppController::setTypingMonitoringEnabled(bool enabled)
         return;
     }
     if (isQuiet()) return;
+    // Guards the enable path only, and deliberately not the teardown above: a
+    // revert must always still stop the tap. The prompt below runs a nested event
+    // loop, so a system or display wake arriving while it is open re-enters here
+    // through resumePetActivity() and would ask the same question twice.
+    if (m_resolvingInputPermission) return;
     const InputStartResult result = m_inputSource->start();
     if (result == InputStartResult::Started) return;
 
+    m_resolvingInputPermission = true;
     m_settings->setTypingDetectionEnabled(false);
     m_typingDetector->reset();
     // First-time request: the system access prompt is already on screen. Don't
     // stack our own dialog on top of it; the user allows there, then re-enables.
-    if (result == InputStartResult::PermissionRequested) return;
-    const AppNotifier::PermissionChoice choice = m_notifier->promptInputPermission(
-        m_localization->text(TextKey::InputPermissionTitle),
-        m_localization->text(TextKey::InputPermissionBody),
-        m_localization->text(TextKey::OpenSystemSettings));
-    if (choice == AppNotifier::PermissionChoice::OpenSettings) {
-        QDesktopServices::openUrl(QUrl(QStringLiteral("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")));
+    if (result != InputStartResult::PermissionRequested) {
+        const AppNotifier::PermissionChoice choice = m_notifier->promptInputPermission(
+            m_localization->text(TextKey::InputPermissionTitle),
+            m_localization->text(TextKey::InputPermissionBody),
+            m_localization->text(TextKey::OpenSystemSettings));
+        if (choice == AppNotifier::PermissionChoice::OpenSettings) {
+            QDesktopServices::openUrl(QUrl(QStringLiteral("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")));
+        }
     }
+    m_resolvingInputPermission = false;
 }
 
 void AppController::refreshPetLibrary()
