@@ -526,6 +526,37 @@ private slots:
         QVERIFY(!hasIssue(result, Problem::MissingRow, 6));
     }
 
+    // A blocked compose still produces the atlas it could. Blank-on-failure was the
+    // first behaviour and it made the preview useless in exactly the case it exists
+    // for: the user cannot see which of their eleven strips landed.
+    void ablockedComposeStillFillsTheRowsItCould()
+    {
+        QVector<RowInput> inputs = everyRow();
+        inputs.removeIf([](const RowInput &input) { return input.row == 5 || input.row == 9; });
+
+        const Result result = compose(inputs, {});
+        QVERIFY(!result.isInstallable());
+        QVERIFY(!result.atlas.isNull());
+        QCOMPARE(result.atlas.size(), QSize(PetAtlas::Width, PetAtlas::Height));
+
+        for (const RowSpec &spec : rows()) {
+            const bool supplied = spec.row != 5 && spec.row != 9;
+            const int pixels = opaqueCount(result.atlas.copy(cellRect(spec.row, 0)));
+            if (supplied) {
+                QVERIFY2(pixels > 0, qPrintable(QStringLiteral("row %1 is blank").arg(spec.row)));
+            } else {
+                QVERIFY2(pixels == 0,
+                         qPrintable(QStringLiteral("row %1 was invented").arg(spec.row)));
+            }
+        }
+
+        // And it does not pile an occupancy failure on top of the real explanation:
+        // a partial atlas fails occupancy by definition, so saying so adds nothing.
+        QVERIFY(hasIssue(result, Problem::MissingRow, 5));
+        QVERIFY(hasIssue(result, Problem::MissingRow, 9));
+        QVERIFY(!hasIssue(result, Problem::OccupancyFailed));
+    }
+
     // An all-background frame would fail occupancy with "Used cell ... is empty", so
     // it has to be caught before anything tries to install it.
     void anEntirelyBackgroundFrameIsReportedAsEmpty()

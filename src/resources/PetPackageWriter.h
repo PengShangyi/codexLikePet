@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QImage>
+#include <QMetaType>
 #include <QString>
 
 // Writes a minimal pet package that PetPackageValidator accepts: one manifest and
@@ -44,3 +45,7 @@ bool write(const QString &directory,
            QString *error);
 
 }  // namespace PetPackageWriter
+
+// Travels through AtlasAssemblerWindow::installRequested, and QSignalSpy stores signal
+// arguments as QVariants -- without this the assembler's test records an empty one.
+Q_DECLARE_METATYPE(PetPackageWriter::PetInfo)

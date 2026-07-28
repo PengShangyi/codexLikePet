@@ -85,10 +85,11 @@ private slots:
         // QApplication::setFont. Fonts come from Theme's font helpers instead.
         QVERIFY(!light.contains(QStringLiteral("font-")));
 
-        // A rule matching PetPreviewWidget would make QStyleSheetStyle set
-        // WA_StyledBackground on it, painting a background before paintEvent and
-        // silently undoing the opaque-paint optimisation.
+        // A rule matching either of these would make QStyleSheetStyle set
+        // WA_StyledBackground on them, painting a background before paintEvent and
+        // silently undoing the opaque-paint optimisation both rely on.
         QVERIFY(!light.contains(QStringLiteral("PetPreviewWidget")));
+        QVERIFY(!light.contains(QStringLiteral("AtlasGridPreview")));
     }
 
     void fontHelpersDeriveFromTheBaseFont()

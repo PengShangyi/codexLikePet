@@ -214,6 +214,8 @@ potato_add_library(potato_app
             src/settings/OnboardingWindow.cpp src/settings/OnboardingWindow.h
             src/settings/AboutWindow.cpp src/settings/AboutWindow.h
             src/settings/PetGuideWindow.cpp src/settings/PetGuideWindow.h
+            src/settings/AtlasAssemblerWindow.cpp src/settings/AtlasAssemblerWindow.h
+            src/settings/AtlasGridPreview.cpp src/settings/AtlasGridPreview.h
             src/settings/PetPreviewWidget.cpp src/settings/PetPreviewWidget.h
             src/pet/PetWindow.cpp src/pet/PetWindow.h
             src/pet/AnimationPlayer.cpp src/pet/AnimationPlayer.h

@@ -100,6 +100,7 @@ qt_add_executable(potato_ui_test
     test_ui_kit.cpp
     test_settings_window.cpp
     test_pet_guide_window.cpp
+    test_atlas_assembler_window.cpp
     test_pet_window.cpp
     ../src/pet/PetWindow.cpp
     ../src/pet/PetWindow.h
@@ -110,6 +111,10 @@ qt_add_executable(potato_ui_test
     # theme and Widgets, and potato_app is off limits to a grouped test.
     ../src/settings/PetGuideWindow.cpp
     ../src/settings/PetGuideWindow.h
+    ../src/settings/AtlasAssemblerWindow.cpp
+    ../src/settings/AtlasAssemblerWindow.h
+    ../src/settings/AtlasGridPreview.cpp
+    ../src/settings/AtlasGridPreview.h
     ../src/settings/PetPreviewWidget.cpp
     ../src/settings/PetPreviewWidget.h
     ../src/platform/SystemSymbols.h
@@ -118,12 +123,14 @@ qt_add_executable(potato_ui_test
 target_include_directories(potato_ui_test PRIVATE ../src .)
 target_link_libraries(potato_ui_test PRIVATE
     potato_settings_core potato_atlas potato_ui potato_theme potato_geometry potato_overlay
+    potato_package potato_policy
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test "-framework AppKit")
 potato_add_grouped_tests(potato_ui_test OFFSCREEN CLASSES
     potato_theme_test           ThemeTest
     potato_ui_kit_test          UiKitTest
     potato_settings_window_test SettingsWindowTest
     potato_pet_guide_window_test PetGuideWindowTest
+    potato_atlas_assembler_window_test AtlasAssemblerWindowTest
     potato_pet_window_test      PetWindowRenderTest)
 
 qt_add_executable(potato_package_test

@@ -135,6 +135,51 @@ QString Localization::text(TextKey key) const
     case TextKey::PetGuideCopied: return zh ? QStringLiteral("已复制") : QStringLiteral("Copied");
     case TextKey::PetGuideOpenDoc: return zh ? QStringLiteral("打开创作指南") : QStringLiteral("Open authoring guide");
     case TextKey::PetGuideRevealSkill: return zh ? QStringLiteral("显示 Hatch Pet 技能") : QStringLiteral("Reveal Hatch Pet skill");
+
+    case TextKey::AssemblerButton: return zh ? QStringLiteral("拼装图集…") : QStringLiteral("Assemble atlas…");
+    case TextKey::AssemblerTitle: return zh ? QStringLiteral("拼装宠物图集") : QStringLiteral("Assemble a pet atlas");
+    case TextKey::AssemblerIntro: return zh ? QStringLiteral("为每一行选择第 2 步生成的长条图。Potato 会切分每一帧、抠掉背景色、统一大小与落地基准线，拼成一张 1536×2288 的图集并直接安装。") : QStringLiteral("Choose the strip you generated for each row in step 2. Potato slices out every frame, keys out the background, gives them all one size and one ground line, then assembles the 1536×2288 atlas and installs it.");
+    case TextKey::AssemblerSectionRows: return zh ? QStringLiteral("动作行") : QStringLiteral("Animation rows");
+    case TextKey::AssemblerSectionKey: return zh ? QStringLiteral("背景抠除") : QStringLiteral("Background removal");
+    case TextKey::AssemblerSectionPet: return zh ? QStringLiteral("宠物信息") : QStringLiteral("Pet details");
+    case TextKey::AssemblerChromaKey: return zh ? QStringLiteral("背景色") : QStringLiteral("Background colour");
+    case TextKey::AssemblerKeyTolerance: return zh ? QStringLiteral("容差") : QStringLiteral("Tolerance");
+    case TextKey::AssemblerDespill: return zh ? QStringLiteral("清除边缘残留") : QStringLiteral("Clean up edge fringe");
+    case TextKey::AssemblerDisplayName: return zh ? QStringLiteral("显示名称") : QStringLiteral("Display name");
+    case TextKey::AssemblerPetId: return zh ? QStringLiteral("宠物 ID") : QStringLiteral("Pet id");
+    case TextKey::AssemblerChoose: return zh ? QStringLiteral("选择…") : QStringLiteral("Choose…");
+    case TextKey::AssemblerFillFromFolder: return zh ? QStringLiteral("从文件夹填充…") : QStringLiteral("Fill from folder…");
+    case TextKey::AssemblerDetectKey: return zh ? QStringLiteral("自动识别") : QStringLiteral("Detect");
+    case TextKey::AssemblerCompose: return zh ? QStringLiteral("生成预览") : QStringLiteral("Assemble preview");
+    case TextKey::AssemblerInstall: return zh ? QStringLiteral("安装宠物") : QStringLiteral("Install pet");
+    case TextKey::AssemblerChooseStripTitle: return zh ? QStringLiteral("选择动作行长条图") : QStringLiteral("Choose an animation strip");
+    case TextKey::AssemblerFillFromFolderTitle: return zh ? QStringLiteral("选择存放长条图的文件夹") : QStringLiteral("Choose the folder holding your strips");
+    case TextKey::AssemblerNoStrip: return zh ? QStringLiteral("未选择") : QStringLiteral("Not chosen");
+    case TextKey::AssemblerScaleReadout: return zh ? QStringLiteral("缩放至 %1%") : QStringLiteral("Fitted at %1%");
+    case TextKey::AssemblerFilledCount: return zh ? QStringLiteral("已匹配 %1 / %2 行") : QStringLiteral("Matched %1 of %2 rows");
+    case TextKey::AssemblerReady: return zh ? QStringLiteral("图集已就绪，可以安装。") : QStringLiteral("The atlas is ready to install.");
+
+    // Contract names first, gloss second: `idle` is what the prompt said and what the
+    // file is called, so replacing it would break the connection to both.
+    case TextKey::AssemblerRowIdle: return zh ? QStringLiteral("idle 待机") : QStringLiteral("idle");
+    case TextKey::AssemblerRowRunningRight: return zh ? QStringLiteral("running-right 向右跑") : QStringLiteral("running-right");
+    case TextKey::AssemblerRowRunningLeft: return zh ? QStringLiteral("running-left 向左跑") : QStringLiteral("running-left");
+    case TextKey::AssemblerRowWaving: return zh ? QStringLiteral("waving 挥手") : QStringLiteral("waving");
+    case TextKey::AssemblerRowJumping: return zh ? QStringLiteral("jumping 跳跃") : QStringLiteral("jumping");
+    case TextKey::AssemblerRowFailed: return zh ? QStringLiteral("failed 失落") : QStringLiteral("failed");
+    case TextKey::AssemblerRowWaiting: return zh ? QStringLiteral("waiting 等待") : QStringLiteral("waiting");
+    case TextKey::AssemblerRowRunning: return zh ? QStringLiteral("running 奔跑") : QStringLiteral("running");
+    case TextKey::AssemblerRowReview: return zh ? QStringLiteral("review 查看") : QStringLiteral("review");
+    case TextKey::AssemblerRowLookA: return zh ? QStringLiteral("look-a 朝向 000°–157.5°") : QStringLiteral("look-a (000°–157.5°)");
+    case TextKey::AssemblerRowLookB: return zh ? QStringLiteral("look-b 朝向 180°–337.5°") : QStringLiteral("look-b (180°–337.5°)");
+
+    case TextKey::AssemblerProblemMissingRow: return zh ? QStringLiteral("%1：还没有选择长条图。") : QStringLiteral("%1: no strip chosen yet.");
+    case TextKey::AssemblerProblemStripTooSmall: return zh ? QStringLiteral("%1：图片太小，放不下这一行的帧数。") : QStringLiteral("%1: the image is too small to hold this row's frames.");
+    case TextKey::AssemblerProblemEmptyFrame: return zh ? QStringLiteral("%1 第 %2 帧：抠除背景后什么都不剩。请检查帧数与背景色。") : QStringLiteral("%1 frame %2: nothing left after removing the background. Check the frame count and the background colour.");
+    case TextKey::AssemblerProblemOccupancy: return zh ? QStringLiteral("拼装结果不符合图集格式要求。") : QStringLiteral("The assembled atlas does not satisfy the atlas contract.");
+    case TextKey::AssemblerProblemStripAspect: return zh ? QStringLiteral("%1：长宽比与这一行的帧数不匹配，可能帧数不对或叠了两行。") : QStringLiteral("%1: the proportions do not match this row's frame count — it may have the wrong number of frames, or two rows stacked.");
+    case TextKey::AssemblerProblemOutlierFrame: return zh ? QStringLiteral("%1 第 %2 帧比其他帧大得多，会把整张图集缩小。") : QStringLiteral("%1 frame %2 is much larger than the others, which shrinks the whole atlas.");
+    case TextKey::AssemblerProblemDoesNotFit: return zh ? QStringLiteral("%1 第 %2 帧放不进格子，已裁剪。") : QStringLiteral("%1 frame %2 did not fit its cell and was trimmed.");
     }
     return {};
 }

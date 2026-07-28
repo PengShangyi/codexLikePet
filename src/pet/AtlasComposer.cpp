@@ -378,7 +378,11 @@ Result compose(const QVector<RowInput> &inputs, const Options &options)
         row.usable = everyFrameFilled;
     }
 
-    if (result.hasBlockingIssue()) return result;
+    // Deliberately no early return on a blocking issue. Composing whatever rows *are*
+    // usable is the difference between a preview showing nine good rows and two gaps,
+    // and a preview that is simply blank -- and blank is precisely when the user most
+    // needs to see which of their strips landed. isInstallable() still says no.
+    const bool blocked = result.hasBlockingIssue();
 
     // One scale and one ground line for the whole atlas. Per-frame scaling would make
     // the character change size between frames; per-frame vertical centring -- which
@@ -484,7 +488,11 @@ Result compose(const QVector<RowInput> &inputs, const Options &options)
 
     // The single check that decides whether the import will succeed, so pay for it
     // here rather than discovering it at install. About 2ms over 3.5M pixels.
-    if (!PetAtlas::validateV2Occupancy(atlas)) {
+    //
+    // Skipped when something blocking was already reported: a partial atlas fails
+    // occupancy by definition, and saying so on top of "idle: no strip chosen yet"
+    // adds a line that explains nothing and reads like a second, deeper problem.
+    if (!blocked && !PetAtlas::validateV2Occupancy(atlas)) {
         result.issues.append({Problem::OccupancyFailed, -1, -1});
     }
     result.atlas = atlas;

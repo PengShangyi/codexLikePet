@@ -45,6 +45,26 @@ enum class TextKey {
     PetGuidePromptLabel, PetGuideRowPromptLabel, PetGuideManifestLabel,
     PetGuidePlaceholderNote, PetGuideCopy, PetGuideCopied,
     PetGuideOpenDoc, PetGuideRevealSkill,
+    // The atlas assembler, opened from the guide's step 3. The eleven row names are
+    // the contract's own words rather than translations: they are what the user typed
+    // into the prompt ("State: idle") and therefore what they named the file, so the
+    // Chinese entries gloss them instead of replacing them.
+    AssemblerButton, AssemblerTitle, AssemblerIntro,
+    AssemblerSectionRows, AssemblerSectionKey, AssemblerSectionPet,
+    AssemblerChromaKey, AssemblerKeyTolerance, AssemblerDespill,
+    AssemblerDisplayName, AssemblerPetId,
+    AssemblerChoose, AssemblerFillFromFolder, AssemblerDetectKey,
+    AssemblerCompose, AssemblerInstall,
+    AssemblerChooseStripTitle, AssemblerFillFromFolderTitle,
+    AssemblerNoStrip, AssemblerScaleReadout, AssemblerFilledCount, AssemblerReady,
+    AssemblerRowIdle, AssemblerRowRunningRight, AssemblerRowRunningLeft,
+    AssemblerRowWaving, AssemblerRowJumping, AssemblerRowFailed,
+    AssemblerRowWaiting, AssemblerRowRunning, AssemblerRowReview,
+    AssemblerRowLookA, AssemblerRowLookB,
+    AssemblerProblemMissingRow, AssemblerProblemStripTooSmall,
+    AssemblerProblemEmptyFrame, AssemblerProblemOccupancy,
+    AssemblerProblemStripAspect, AssemblerProblemOutlierFrame,
+    AssemblerProblemDoesNotFit,
 };
 
 class Localization final : public QObject
