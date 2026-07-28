@@ -136,6 +136,7 @@ qt_add_executable(potato_package_test
     test_package_validator.cpp
     test_library.cpp
     test_package_importer.cpp
+    test_atlas_composer.cpp
     ../src/resources/PetLibrary.cpp
     ../src/resources/PetLibrary.h
     ../src/resources/ArchiveExtractor.cpp
@@ -150,7 +151,8 @@ potato_add_grouped_tests(potato_package_test CLASSES
     potato_package_policy_test    PackagePolicyTest
     potato_package_validator_test PackageValidatorTest
     potato_library_test           LibraryTest
-    potato_package_importer_test  PackageImporterTest)
+    potato_package_importer_test  PackageImporterTest
+    potato_atlas_composer_test    AtlasComposerTest)
 
 qt_add_executable(potato_animation_test
     groups/animation_main.cpp

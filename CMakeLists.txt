@@ -169,6 +169,7 @@ potato_add_library(potato_geometry
 potato_add_library(potato_atlas
     SOURCES src/pet/PetAtlas.cpp src/pet/PetAtlas.h
             src/pet/AnimationClip.cpp src/pet/AnimationClip.h
+            src/pet/AtlasComposer.cpp src/pet/AtlasComposer.h
             src/pet/ClipContract.h
     LINK Qt6::Core Qt6::Gui
     PCH ${POTATO_PCH_GUI})

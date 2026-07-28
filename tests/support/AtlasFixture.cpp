@@ -41,12 +41,9 @@ QImage buildValid()
     QImage image(PetAtlas::Width, PetAtlas::Height, QImage::Format_RGBA8888);
     image.fill(Qt::transparent);
     for (int row = 0; row < PetAtlas::Rows; ++row) {
-        // Rows 0..8 are the v2 animation rows and use only as many columns as
-        // their spec declares; rows 9 and 10 are the look grid and use all eight.
-        const int columns = row <= 8
-            ? PetAtlas::animationSpec(static_cast<V2AnimationState>(row)).frameCount
-            : PetAtlas::Columns;
-        for (int column = 0; column < columns; ++column) {
+        // The same function the occupancy check enforces, so a fixture built here
+        // cannot disagree with the rule it is meant to satisfy.
+        for (int column = 0; column < PetAtlas::usedColumns(row); ++column) {
             image.setPixelColor(column * PetAtlas::CellWidth + 1,
                                 row * PetAtlas::CellHeight + 1,
                                 Qt::white);

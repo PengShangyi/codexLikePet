@@ -87,6 +87,20 @@ public:
 
     static const AnimationSpec &animationSpec(V2AnimationState state);
 
+    // How many of a row's eight columns hold a frame. Rows 0-8 take it from their
+    // animation spec; rows 9 and 10 are the sixteen look directions and use every
+    // column. The occupancy rule below is two-sided, so this is the one number that
+    // decides both "must have pixels" and "must be transparent" -- it exists as a
+    // function because that derivation was written out separately in the validator
+    // and in the test fixture, and AtlasComposer would have been a third copy.
+    static int usedColumns(int row);
+
+    // Occupancy against an image this class does not own, so a composed atlas can be
+    // checked before anything writes it to disk. Note the rule is two-sided: a cell
+    // that *should* hold a frame and is empty fails just as loudly as an unused cell
+    // that is not transparent.
+    static bool validateV2Occupancy(const QImage &image, QString *error = nullptr);
+
 private:
     QImage m_image;
     QString m_filePath;

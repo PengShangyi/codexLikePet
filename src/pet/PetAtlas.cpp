@@ -163,6 +163,12 @@ QImage PetAtlas::lookFrame(int clockwiseIndex) const
     return m_image.copy(column * CellWidth, row * CellHeight, CellWidth, CellHeight);
 }
 
+int PetAtlas::usedColumns(int row)
+{
+    if (row < 0 || row >= Rows) return 0;
+    return row <= 8 ? animationSpec(static_cast<V2AnimationState>(row)).frameCount : Columns;
+}
+
 bool PetAtlas::validateV2Occupancy(QString *error) const
 {
     if (!isValid()) {
@@ -171,17 +177,34 @@ bool PetAtlas::validateV2Occupancy(QString *error) const
         }
         return false;
     }
+    return validateV2Occupancy(m_image, error);
+}
+
+bool PetAtlas::validateV2Occupancy(const QImage &image, QString *error)
+{
+    if (image.isNull() || image.width() != Width || image.height() != Height) {
+        if (error) {
+            *error = QStringLiteral("Atlas must be %1x%2").arg(Width).arg(Height);
+        }
+        return false;
+    }
+    // The scan below reads scanlines as QRgb. The member overload only ever arrives
+    // here with what load() produced, but a caller composing an atlas could hand over
+    // anything, and a narrower depth would make that cast read the wrong bytes rather
+    // than fail. Convert instead of refusing: an atlas whose only fault is its format
+    // still has a truthful answer to give about its occupancy.
+    if (image.depth() != 32) {
+        return validateV2Occupancy(image.convertedTo(QImage::Format_ARGB32), error);
+    }
 
     for (int row = 0; row < Rows; ++row) {
-        const int usedColumns = row <= 8
-            ? animationSpec(static_cast<V2AnimationState>(row)).frameCount
-            : Columns;
+        const int used = usedColumns(row);
         for (int column = 0; column < Columns; ++column) {
             bool hasVisiblePixel = false;
             const int startX = column * CellWidth;
             const int startY = row * CellHeight;
             for (int y = startY; y < startY + CellHeight && !hasVisiblePixel; ++y) {
-                const QRgb *line = reinterpret_cast<const QRgb *>(m_image.constScanLine(y));
+                const QRgb *line = reinterpret_cast<const QRgb *>(image.constScanLine(y));
                 for (int x = startX; x < startX + CellWidth; ++x) {
                     if (qAlpha(line[x]) != 0) {
                         hasVisiblePixel = true;
@@ -194,7 +217,7 @@ bool PetAtlas::validateV2Occupancy(QString *error) const
             // still in row 0, column 6. The slot is optional and is not part of
             // the six-frame idle loop; row 0, column 7 remains unused.
             if (row == 0 && column == 6) continue;
-            const bool shouldBeUsed = column < usedColumns;
+            const bool shouldBeUsed = column < used;
             if (shouldBeUsed != hasVisiblePixel) {
                 if (error) {
                     *error = shouldBeUsed
