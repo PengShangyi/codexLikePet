@@ -10,6 +10,7 @@
 QObject *createThemeTest();
 QObject *createUiKitTest();
 QObject *createSettingsWindowTest();
+QObject *createPetGuideWindowTest();
 QObject *createPetWindowRenderTest();
 
 int main(int argc, char **argv)
@@ -20,6 +21,7 @@ int main(int argc, char **argv)
         {"ThemeTest", createThemeTest},
         {"UiKitTest", createUiKitTest},
         {"SettingsWindowTest", createSettingsWindowTest},
+        {"PetGuideWindowTest", createPetGuideWindowTest},
         {"PetWindowRenderTest", createPetWindowRenderTest},
     });
 }

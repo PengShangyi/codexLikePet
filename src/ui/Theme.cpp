@@ -155,10 +155,16 @@ QString styleSheet(Qt::ColorScheme scheme)
     const Palette p = palette(scheme);
     QStringList rules;
 
-    rules << QStringLiteral("QWidget#settingsRoot, QWidget#pageContent { background: %1; }")
+    rules << QStringLiteral("QWidget#settingsRoot, QWidget#pageContent,"
+                            " QWidget#petGuideRoot { background: %1; }")
                  .arg(css(p.pageBackground));
 
     rules << QStringLiteral("QWidget#navBar { background: %1; border-bottom: 1px solid %2; }")
+                 .arg(css(p.cardBackground), css(p.hairline));
+    // The pet guide's action strip is the same separated chrome bar with the one
+    // edge flipped: it sits below a scrolling body rather than above one.
+    rules << QStringLiteral("QWidget#petGuideActions { background: %1;"
+                            " border-top: 1px solid %2; }")
                  .arg(css(p.cardBackground), css(p.hairline));
 
     rules << QStringLiteral("QToolButton#navItem { background: transparent; border: none;"
@@ -177,7 +183,14 @@ QString styleSheet(Qt::ColorScheme scheme)
                  .arg(css(p.cardBackground), css(p.cardBorder))
                  .arg(Metrics::cardRadius);
 
-    rules << QStringLiteral("QLabel#cardTitle, QLabel#rowLabel { color: %1; background: transparent; }")
+    // petGuideText covers every line of prose in the pet guide -- its title, intro,
+    // step headings and bodies alike. All of it has to be named, because that window
+    // takes its background from this sheet: leaving a label unnamed would colour it
+    // from QPalette instead, and the two authorities only happen to agree. Forcing a
+    // dark scheme while the system is light paints pure black on a near-black page.
+    // Hierarchy there comes from weight and size, not colour.
+    rules << QStringLiteral("QLabel#cardTitle, QLabel#rowLabel,"
+                            " QLabel#petGuideText { color: %1; background: transparent; }")
                  .arg(css(p.textPrimary));
     rules << QStringLiteral("QLabel#rowDescription, QLabel#valueReadout,"
                             " QLabel#rowValue { color: %1; background: transparent; }")
@@ -211,10 +224,35 @@ QString styleSheet(Qt::ColorScheme scheme)
     rules << QStringLiteral("QScrollArea#pageScroll { border: none; background: transparent; }");
 
     rules << QStringLiteral("QPlainTextEdit#resourceSummary { background: %1;"
-                            " border: 1px solid %2; border-radius: 6px; color: %3;"
-                            " padding: 6px; selection-background-color: %4;"
-                            " selection-color: %5; }")
-                 .arg(css(p.sunken), css(p.hairline), css(p.textSecondary))
+                            " border: 1px solid %2; border-radius: %3px; color: %4;"
+                            " padding: %5px; selection-background-color: %6;"
+                            " selection-color: %7; }")
+                 .arg(css(p.sunken), css(p.hairline))
+                 .arg(Metrics::codeBoxRadius)
+                 .arg(css(p.textSecondary))
+                 .arg(Metrics::codeBoxMargin)
+                 .arg(css(p.accent), css(p.accentText));
+
+    // Like the resource summary, but on cardBackground rather than sunken, and with
+    // three differences that all follow from where it sits.
+    //
+    // It sits directly on the page, not inside a card. sunken is only three or four
+    // steps from pageBackground -- it reads as recessed against the white of a
+    // SettingsCard, which is the only place the resource summary ever appears, and
+    // as nothing at all against the page. cardBackground is what every other
+    // on-page surface in the app uses, so the snippet reads as a card like the rest
+    // of them.
+    //
+    // It takes textPrimary, because a prompt template is content to read rather
+    // than a subtitle. And it gets no padding: the inner margin is on the text
+    // document instead, so the box's frozen height still accounts for it. See
+    // Metrics::codeBoxMargin.
+    rules << QStringLiteral("QPlainTextEdit#petGuideSnippet { background: %1;"
+                            " border: 1px solid %2; border-radius: %3px; color: %4;"
+                            " selection-background-color: %5; selection-color: %6; }")
+                 .arg(css(p.cardBackground), css(p.cardBorder))
+                 .arg(Metrics::codeBoxRadius)
+                 .arg(css(p.textPrimary))
                  .arg(css(p.accent), css(p.accentText));
 
     return rules.join(QLatin1Char('\n'));

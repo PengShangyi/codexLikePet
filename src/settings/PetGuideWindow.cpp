@@ -1,5 +1,7 @@
 #include "settings/PetGuideWindow.h"
 
+#include "ui/Theme.h"
+
 #include <QAbstractTextDocumentLayout>
 #include <QClipboard>
 #include <QCoreApplication>
@@ -87,6 +89,13 @@ const auto kManifest = QStringLiteral(
 constexpr int kMaxSnippetHeight = 600;
 constexpr int kCopyFeedbackMs = 1500;
 
+// Two pixels of room on top of the measured content and chrome. Without it the
+// reserved horizontal scrollbar height is consumed exactly, and whether the last
+// line survives that tie comes down to the platform: measured at the same content,
+// cocoa shows every line and the offscreen plugin asks for one line of scroll. The
+// tie is not worth being clever about.
+constexpr int kSnippetHeightSlack = 2;
+
 // Both live under the app bundle; see the POST_BUILD steps in CMakeLists.txt.
 const auto kAuthoringDoc = QStringLiteral("Documentation/PET_AUTHORING.md");
 const auto kHatchPetSkill = QStringLiteral("Skills/hatch-pet");
@@ -97,46 +106,65 @@ QString bundledResourcePath(const QString &relativePath)
                                .filePath(QStringLiteral("../Resources/") + relativePath));
 }
 
+// Every label in this window goes through here, so none can be added without the
+// object name the stylesheet colours it by. An unnamed one takes its colour from
+// QPalette while the window takes its background from Theme, and the two are only
+// coincidentally in agreement -- the mismatch reads as black text on a dark page.
+QLabel *makeProseLabel(QWidget *parent, bool wrap = true)
+{
+    auto *label = new QLabel(parent);
+    label->setObjectName(QStringLiteral("petGuideText"));
+    label->setWordWrap(wrap);
+    return label;
+}
+
 }  // namespace
 
 PetGuideWindow::PetGuideWindow(Localization *localization, QWidget *parent)
     : QWidget(parent, Qt::Window)
     , m_localization(localization)
+    , m_theme(new ThemeWatcher(this))
 {
     setMinimumWidth(600);
     resize(660, 720);
+    setObjectName(QStringLiteral("petGuideRoot"));
+    // Not a QFrame, so the stylesheet's background rule needs this to bite.
+    setAttribute(Qt::WA_StyledBackground, true);
 
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
     // The guide is four screens of text, so the body scrolls while the action
-    // row below stays reachable.
+    // row below stays reachable. Both parts borrow the settings pages' object
+    // names rather than adding selectors: they are the same page background and
+    // the same transparent scroll frame.
     auto *scroll = new QScrollArea(this);
+    scroll->setObjectName(QStringLiteral("pageScroll"));
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     auto *content = new QWidget(scroll);
+    content->setObjectName(QStringLiteral("pageContent"));
+    content->setAttribute(Qt::WA_StyledBackground, true);
     auto *column = new QVBoxLayout(content);
     column->setContentsMargins(24, 24, 24, 24);
     column->setSpacing(10);
     scroll->setWidget(content);
     root->addWidget(scroll, 1);
 
-    m_title = new QLabel(content);
+    m_title = makeProseLabel(content);
     QFont titleFont = m_title->font();
     titleFont.setPointSize(titleFont.pointSize() + 6);
     titleFont.setBold(true);
     m_title->setFont(titleFont);
     column->addWidget(m_title);
 
-    m_intro = new QLabel(content);
-    m_intro->setWordWrap(true);
+    m_intro = makeProseLabel(content);
     column->addWidget(m_intro);
 
     addSection(column, TextKey::PetGuideContractHeading, TextKey::PetGuideContractBody);
 
-    m_placeholderNote = new QLabel(content);
-    m_placeholderNote->setWordWrap(true);
+    m_placeholderNote = makeProseLabel(content);
     column->addSpacing(4);
     column->addWidget(m_placeholderNote);
 
@@ -154,6 +182,8 @@ PetGuideWindow::PetGuideWindow(Localization *localization, QWidget *parent)
     column->addStretch(1);
 
     auto *actions = new QWidget(this);
+    actions->setObjectName(QStringLiteral("petGuideActions"));
+    actions->setAttribute(Qt::WA_StyledBackground, true);
     auto *actionLayout = new QHBoxLayout(actions);
     actionLayout->setContentsMargins(24, 12, 24, 16);
     m_openDocButton = new QPushButton(actions);
@@ -183,18 +213,30 @@ PetGuideWindow::PetGuideWindow(Localization *localization, QWidget *parent)
     if (m_localization) {
         connect(m_localization, &Localization::languageChanged, this, &PetGuideWindow::retranslate);
     }
+    connect(m_theme, &ThemeWatcher::schemeChanged, this, &PetGuideWindow::applyTheme);
     retranslate();
+}
+
+void PetGuideWindow::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    if (!m_themeApplied) applyTheme();
+}
+
+void PetGuideWindow::applyTheme()
+{
+    m_themeApplied = true;
+    setStyleSheet(Theme::styleSheet(m_theme->scheme()));
 }
 
 void PetGuideWindow::addSection(QVBoxLayout *column, TextKey headingKey, TextKey bodyKey)
 {
     QWidget *parent = column->parentWidget();
-    auto *heading = new QLabel(parent);
+    auto *heading = makeProseLabel(parent);
     QFont headingFont = heading->font();
     headingFont.setBold(true);
     heading->setFont(headingFont);
-    auto *body = new QLabel(parent);
-    body->setWordWrap(true);
+    auto *body = makeProseLabel(parent);
     column->addSpacing(6);
     column->addWidget(heading);
     column->addWidget(body);
@@ -208,8 +250,7 @@ void PetGuideWindow::addSnippet(QVBoxLayout *column, TextKey labelKey, const QSt
     auto *captionRow = new QWidget(parent);
     auto *captionLayout = new QHBoxLayout(captionRow);
     captionLayout->setContentsMargins(0, 0, 0, 0);
-    auto *label = new QLabel(captionRow);
-    label->setWordWrap(true);
+    auto *label = makeProseLabel(captionRow);
     auto *copyButton = new QPushButton(captionRow);
     captionLayout->addWidget(label, 1);
     captionLayout->addWidget(copyButton);
@@ -217,6 +258,7 @@ void PetGuideWindow::addSnippet(QVBoxLayout *column, TextKey labelKey, const QSt
     column->addWidget(captionRow);
 
     auto *box = new QPlainTextEdit(parent);
+    box->setObjectName(QStringLiteral("petGuideSnippet"));
     box->setPlainText(content);
     box->setReadOnly(true);
     // No wrapping: the text is pre-wrapped, and a reflowed prompt would no longer
@@ -225,6 +267,12 @@ void PetGuideWindow::addSnippet(QVBoxLayout *column, TextKey labelKey, const QSt
     box->setTabChangesFocus(true);
     const QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     box->setFont(mono);
+    // The stylesheet draws the border, so drop the native sunken panel rather
+    // than nesting one inside the other. The inner margin goes on the document
+    // instead of into a QSS `padding`, because the height below counts the
+    // document margin and cannot see QSS padding at all.
+    box->setFrameShape(QFrame::NoFrame);
+    box->document()->setDocumentMargin(Theme::Metrics::codeBoxMargin);
 
     // Sized to show every line, because a box one line short of its content reads
     // as broken rather than as scrollable.
@@ -234,15 +282,19 @@ void PetGuideWindow::addSnippet(QVBoxLayout *column, TextKey labelKey, const QSt
     // fixed-width system font, which is invisible on a short snippet and cost the
     // longest prompt its last line. The horizontal scrollbar is reserved rather
     // than measured because whether it appears depends on the window width, and
-    // it would otherwise eat the last line only once the window was narrow.
+    // it would otherwise eat the last line only once the window was narrow. The
+    // stylesheet's 1px border is added outright for the same reason: frameWidth()
+    // reports it only once QStyleSheetStyle is in play, and counting it twice
+    // costs two pixels while missing it costs a line.
     QTextDocument *document = box->document();
     const int lines = static_cast<int>(content.count(QLatin1Char('\n'))) + 1;
     const qreal blockHeight = document->documentLayout()->blockBoundingRect(document->firstBlock()).height();
     const qreal lineHeight = blockHeight > 0 ? blockHeight : box->fontMetrics().lineSpacing();
     const int chrome = 2 * box->frameWidth()
+        + 2 * Theme::Metrics::hairlineThickness
         + 2 * qRound(document->documentMargin())
         + box->horizontalScrollBar()->sizeHint().height();
-    const int natural = static_cast<int>(std::ceil(lineHeight * lines)) + chrome;
+    const int natural = static_cast<int>(std::ceil(lineHeight * lines)) + chrome + kSnippetHeightSlack;
     box->setFixedHeight(qMin(natural, kMaxSnippetHeight));
     column->addWidget(box);
 

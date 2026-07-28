@@ -8,7 +8,9 @@
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
+class QShowEvent;
 class QVBoxLayout;
+class ThemeWatcher;
 
 // The authoring guide, opened from "Make a pet…" beside Import Pet on the Pet
 // page. It states the v2 atlas contract, hands over ready-to-paste image-model
@@ -30,6 +32,9 @@ class PetGuideWindow final : public QWidget
 public:
     explicit PetGuideWindow(Localization *localization, QWidget *parent = nullptr);
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
 private:
     struct Section {
         QLabel *heading = nullptr;
@@ -46,6 +51,9 @@ private:
     };
 
     void retranslate();
+    // Deferred to the first show like SettingsWindow's, because a window most
+    // sessions never open should not build a stylesheet at construction.
+    void applyTheme();
     void addSection(QVBoxLayout *column, TextKey headingKey, TextKey bodyKey);
     void addSnippet(QVBoxLayout *column, TextKey labelKey, const QString &content);
     // Opens a path under the app bundle's Contents/Resources, or does nothing if
@@ -53,6 +61,8 @@ private:
     void openBundledResource(const QString &relativePath);
 
     Localization *m_localization;
+    ThemeWatcher *m_theme;
+    bool m_themeApplied = false;
     QLabel *m_title = nullptr;
     QLabel *m_intro = nullptr;
     QLabel *m_placeholderNote = nullptr;

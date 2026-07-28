@@ -268,6 +268,31 @@ per-row strips and the assembly step is handed to the skill. Keep that framing
 if you edit the copy: promising a one-shot atlas is the one thing that would
 make the guide actively mislead.
 
+Unlike `AboutWindow`/`OnboardingWindow`, it carries its own `ThemeWatcher` and
+applies `Theme::styleSheet()` on first show, because it is a separate top-level
+window and so inherits nothing from the settings window's subtree. Two things
+follow, both load-bearing:
+
+- **Every label in it is named `petGuideText`**, through a `makeProseLabel()`
+  helper so a new one cannot be added unnamed. Once the sheet owns the window's
+  *background*, an unnamed label is a second authority — it takes its colour from
+  `QPalette` while the page takes its background from `Theme`, which never
+  consults the palette. Measured with the scheme forced to Dark while the platform
+  stayed light: `rgb(0, 0, 0)` text on the `rgb(28, 26, 24)` page.
+- Its snippet boxes are `cardBackground`, not the `sunken` that
+  `QPlainTextEdit#resourceSummary` uses. `sunken` is three or four steps from
+  `pageBackground`: it reads as recessed against the white of a `SettingsCard`,
+  which is the only place the resource summary appears, and as nothing at all
+  against the page. The snippets sit directly on the page, so they take the
+  on-page surface colour like every other card.
+
+Their frozen height is measured, so the inner margin goes on the text document
+(`Metrics::codeBoxMargin` via `setDocumentMargin`) rather than into a QSS
+`padding`, which neither `frameWidth()` nor `documentMargin()` reports.
+`kSnippetHeightSlack` exists because without it the reserved horizontal-scrollbar
+height was consumed to the pixel, and cocoa and the offscreen plugin broke that
+tie differently — one showed every line, the other asked for a line of scroll.
+
 **One deliberate deviation to know about before you "fix" it.** The left and right
 edge animations are turned off at the top of `AppController::applyBehaviorState`
 (`src/app/AppController.cpp`, marked `TEMP:`, with the original combined branch kept

@@ -99,12 +99,17 @@ qt_add_executable(potato_ui_test
     test_theme.cpp
     test_ui_kit.cpp
     test_settings_window.cpp
+    test_pet_guide_window.cpp
     test_pet_window.cpp
     ../src/pet/PetWindow.cpp
     ../src/pet/PetWindow.h
     ../src/platform/MacWindowOverlay.mm
     ../src/settings/SettingsWindow.cpp
     ../src/settings/SettingsWindow.h
+    # Compiled directly rather than linked: the guide needs only Localization, the
+    # theme and Widgets, and potato_app is off limits to a grouped test.
+    ../src/settings/PetGuideWindow.cpp
+    ../src/settings/PetGuideWindow.h
     ../src/settings/PetPreviewWidget.cpp
     ../src/settings/PetPreviewWidget.h
     ../src/platform/SystemSymbols.h
@@ -118,6 +123,7 @@ potato_add_grouped_tests(potato_ui_test OFFSCREEN CLASSES
     potato_theme_test           ThemeTest
     potato_ui_kit_test          UiKitTest
     potato_settings_window_test SettingsWindowTest
+    potato_pet_guide_window_test PetGuideWindowTest
     potato_pet_window_test      PetWindowRenderTest)
 
 qt_add_executable(potato_package_test

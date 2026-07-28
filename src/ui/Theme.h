@@ -77,6 +77,16 @@ inline constexpr int stageShadowHeight = 10;
 inline constexpr int bannerRadius = 8;
 inline constexpr int bannerPadding = 10;
 
+// The sunken read-only text boxes: the resource summary and the pet guide's
+// copyable snippets. A snippet box freezes its own height to fit every line, and
+// it measures that from QPlainTextEdit::frameWidth() plus
+// QTextDocument::documentMargin() -- neither of which reports a QSS `padding`.
+// So the guide's boxes take the margin through setDocumentMargin() instead,
+// where it is counted. The resource summary keeps the QSS padding: its height is
+// a hard-coded constant, so nothing there is measured to be thrown off.
+inline constexpr int codeBoxRadius = 6;
+inline constexpr int codeBoxMargin = 6;
+
 // Speech bubble, kept here so the bubble's geometry stops being a second set of
 // magic numbers next to its colors.
 inline constexpr int bubbleRadius = 14;
