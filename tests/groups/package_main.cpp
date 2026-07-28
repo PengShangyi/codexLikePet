@@ -13,6 +13,7 @@ QObject *createPackageValidatorTest();
 QObject *createLibraryTest();
 QObject *createPackageImporterTest();
 QObject *createAtlasComposerTest();
+QObject *createPetPackageWriterTest();
 
 int main(int argc, char **argv)
 {
@@ -23,5 +24,6 @@ int main(int argc, char **argv)
         {"LibraryTest", createLibraryTest},
         {"PackageImporterTest", createPackageImporterTest},
         {"AtlasComposerTest", createAtlasComposerTest},
+        {"PetPackageWriterTest", createPetPackageWriterTest},
     });
 }

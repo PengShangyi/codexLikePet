@@ -34,4 +34,12 @@ bool isAllowedPackageFileName(const QString &path);
 // a conservative lowercase set.
 bool isValidPetId(const QString &id);
 
+// A valid pet id derived from a display name, for prefilling the field rather
+// than making the user work out the rule from a rejection. Lowercases, replaces
+// every run of disallowed characters with a single hyphen, trims hyphens from the
+// ends, and truncates to the length limit. Returns an empty string when nothing
+// usable survives -- a name in a non-Latin script leaves the caller to ask for an
+// id outright, which is honest, where a transliteration guess would not be.
+QString suggestPetId(const QString &displayName);
+
 }  // namespace PackagePolicy

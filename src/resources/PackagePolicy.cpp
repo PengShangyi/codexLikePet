@@ -50,4 +50,28 @@ bool isValidPetId(const QString &id)
     return pattern.match(id).hasMatch();
 }
 
+QString suggestPetId(const QString &displayName)
+{
+    QString id;
+    id.reserve(displayName.size());
+    for (const QChar ch : displayName.toLower()) {
+        if ((ch >= QLatin1Char('a') && ch <= QLatin1Char('z'))
+            || (ch >= QLatin1Char('0') && ch <= QLatin1Char('9'))) {
+            id.append(ch);
+        } else if (!id.isEmpty() && !id.endsWith(QLatin1Char('-'))) {
+            // One hyphen per run of anything else, and never a leading one -- the id
+            // pattern rejects both a leading hyphen and a doubled separator would
+            // only read as a typo.
+            id.append(QLatin1Char('-'));
+        }
+    }
+    while (id.endsWith(QLatin1Char('-'))) id.chop(1);
+    // The pattern allows 64 characters total.
+    if (id.size() > 64) {
+        id.truncate(64);
+        while (id.endsWith(QLatin1Char('-'))) id.chop(1);
+    }
+    return id;
+}
+
 }  // namespace PackagePolicy

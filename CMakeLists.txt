@@ -182,6 +182,7 @@ potato_add_library(potato_policy
 potato_add_library(potato_package
     SOURCES src/resources/PetPackage.cpp src/resources/PetPackage.h
             src/resources/PetPackageValidator.cpp src/resources/PetPackageValidator.h
+            src/resources/PetPackageWriter.cpp src/resources/PetPackageWriter.h
             src/resources/PetStore.cpp src/resources/PetStore.h
     LINK Qt6::Core Qt6::Gui potato_policy potato_atlas
     PCH ${POTATO_PCH_GUI})

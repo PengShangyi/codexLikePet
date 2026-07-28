@@ -1,7 +1,10 @@
+#include "pet/AtlasComposer.h"
+#include "pet/PetAtlas.h"
 #include "resources/PetPackageValidator.h"
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QPainter>
 #include <QTest>
 
 class BuiltInPetTest final : public QObject
@@ -86,6 +89,85 @@ private slots:
             QVERIFY2(!typingStrip.isNull(), qPrintable(typing.path));
             QCOMPARE(typingStrip.size(), QSize(192 * 3, 208));
             QVERIFY(typingStrip.hasAlphaChannel());
+        }
+    }
+
+    // The composer against real art rather than synthetic blocks.
+    //
+    // The shipped atlas is taken apart into the eleven row strips a model would have
+    // returned -- each row's used cells flattened onto the chroma key the guide's
+    // prompts ask for -- and put back together. Anything the pipeline gets wrong on
+    // soft-shaded, antialiased artwork with a green-leaved subject shows up here and
+    // nowhere else in the suite.
+    //
+    // What is asserted is geometry, because that is what has to be exact: every frame
+    // must come back the same size, and land within a couple of pixels of where it
+    // started. Colour is not asserted at all. The composer deliberately re-registers
+    // frames to a common baseline, and recovering a soft edge that was flattened onto
+    // green is lossy by nature, so a pixel comparison here would measure the
+    // re-registration and the flattening rather than a defect.
+    void theComposerRebuildsTheShippedAtlasFromStrips()
+    {
+        const QString sheet = QDir(QStringLiteral(POTATO_SOURCE_DIR))
+                                  .filePath(QStringLiteral("assets/Pets/potato/spritesheet.webp"));
+        const QImage original = QImage(sheet).convertedTo(QImage::Format_ARGB32);
+        QVERIFY2(!original.isNull(), qPrintable(sheet));
+        QCOMPARE(original.size(), QSize(PetAtlas::Width, PetAtlas::Height));
+
+        QVector<AtlasComposer::RowInput> inputs;
+        for (const AtlasComposer::RowSpec &spec : AtlasComposer::rows()) {
+            const int count = AtlasComposer::frameCount(spec.row);
+            QImage strip(count * PetAtlas::CellWidth, PetAtlas::CellHeight, QImage::Format_ARGB32);
+            strip.fill(AtlasComposer::defaultChromaKey());
+            QPainter painter(&strip);
+            for (int column = 0; column < count; ++column) {
+                painter.drawImage(QPoint(column * PetAtlas::CellWidth, 0), original,
+                                  QRect(column * PetAtlas::CellWidth,
+                                        spec.row * PetAtlas::CellHeight,
+                                        PetAtlas::CellWidth, PetAtlas::CellHeight));
+            }
+            painter.end();
+            inputs.append({spec.row, strip});
+        }
+
+        const AtlasComposer::Result result = AtlasComposer::compose(inputs, {});
+        QVERIFY2(result.isInstallable(),
+                 qPrintable(QStringLiteral("%1 issues").arg(result.issues.size())));
+        QCOMPARE(result.issues.size(), 0);
+        // Real art at the authored size needs no rescaling to fit the cell.
+        QCOMPARE(result.scale, 1.0);
+
+        QString error;
+        QVERIFY2(PetAtlas::validateV2Occupancy(result.atlas, &error), qPrintable(error));
+
+        for (const AtlasComposer::RowSpec &spec : AtlasComposer::rows()) {
+            for (int column = 0; column < AtlasComposer::frameCount(spec.row); ++column) {
+                const QRect cell(column * PetAtlas::CellWidth,
+                                 spec.row * PetAtlas::CellHeight,
+                                 PetAtlas::CellWidth, PetAtlas::CellHeight);
+                const QRect before = AtlasComposer::alphaBounds(original, cell);
+                const QRect after = AtlasComposer::alphaBounds(result.atlas, cell);
+                const QString where = QStringLiteral("row %1 column %2").arg(spec.row).arg(column);
+
+                QVERIFY2(!before.isEmpty() && !after.isEmpty(), qPrintable(where));
+                // Within a pixel on each axis, not exact. The outermost fringe row of
+                // a soft edge can have an original alpha barely above the threshold
+                // alphaBounds measures at; flattened onto the key it becomes very
+                // nearly pure key, and re-keying takes it. One row out of ~192 is the
+                // cost of the round trip, not of the composer.
+                QVERIFY2(qAbs(after.width() - before.width()) <= 1
+                             && qAbs(after.height() - before.height()) <= 1,
+                         qPrintable(QStringLiteral("%1 resized from %2x%3 to %4x%5")
+                                        .arg(where)
+                                        .arg(before.width()).arg(before.height())
+                                        .arg(after.width()).arg(after.height())));
+                QVERIFY2(qAbs(after.left() - before.left()) <= 3
+                             && qAbs(after.top() - before.top()) <= 2,
+                         qPrintable(QStringLiteral("%1 moved from %2,%3 to %4,%5")
+                                        .arg(where)
+                                        .arg(before.left()).arg(before.top())
+                                        .arg(after.left()).arg(after.top())));
+            }
         }
     }
 };
