@@ -3,9 +3,11 @@
 #include "environment/EnvironmentClock.h"
 #include "input/InputActivitySource.h"
 #include "login/LoginItemController.h"
+#include "pet/AtlasComposer.h"
 #include "pet/PetAtlas.h"
 #include "pet/PetWindow.h"
 #include "platform/SystemActivitySource.h"
+#include "settings/AtlasAssemblerWindow.h"
 #include "settings/AppSettings.h"
 #include "settings/SettingsWindow.h"
 #include "support/AtlasFixture.h"
@@ -19,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
+#include <QPainter>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -101,7 +104,14 @@ public:
         ++permissionPrompts;
         return permissionResult;
     }
-    void warn(const QString &, const QString &) override { ++warnings; }
+    // The text as well as the count: a swallowed reason is the hard part to debug
+    // when an install path fails, and asserting on it keeps the message honest.
+    QString lastWarning;
+    void warn(const QString &, const QString &detail) override
+    {
+        ++warnings;
+        lastWarning = detail;
+    }
     bool confirmRemoval(const QString &, const QString &) override { return true; }
     void showFatalStartup(const QString &, const QString &) override {}
 };
@@ -185,6 +195,18 @@ class AppControllerTest final : public QObject
         }
         QString settingsPath() { return config.filePath(QStringLiteral("settings.ini")); }
     };
+
+    // The window is private to the controller and stays that way: showing it is a
+    // public command, and a window that has been shown is findable. A test-only
+    // accessor would be a second way in for no gain.
+    static AtlasAssemblerWindow *showAndFindAssembler(AppController &controller)
+    {
+        controller.showAtlasAssembler();
+        for (QWidget *candidate : QApplication::topLevelWidgets()) {
+            if (auto *window = qobject_cast<AtlasAssemblerWindow *>(candidate)) return window;
+        }
+        return nullptr;
+    }
 
 private slots:
     void fallsBackToFirstAvailablePetWhenSelectionMissing()
@@ -643,6 +665,81 @@ private slots:
 
         controller.showAbout();
         QVERIFY(countTopLevel() > atStartup);
+
+        const int withAbout = countTopLevel();
+        controller.showAtlasAssembler();
+        QVERIFY2(countTopLevel() > withAbout, "the assembler window was not built on demand");
+    }
+
+    // The end of the assembly path: a composed atlas goes through the same importer
+    // the Import Pet buttons use, lands in the library, and becomes the selected pet.
+    // Nothing here is a new boundary -- the importer, notifier and settings were all
+    // already injectable, which is why Dependencies did not have to grow.
+    void installingAnAssembledPetSelectsItAndReportsBack()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+        Localization localization(&settings);
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+        QCOMPARE(settings.selectedPetId(), QStringLiteral("alpha"));
+
+        // Compose a real atlas from synthetic strips, exactly as the window does.
+        QVector<AtlasComposer::RowInput> inputs;
+        for (const AtlasComposer::RowSpec &spec : AtlasComposer::rows()) {
+            const int count = AtlasComposer::frameCount(spec.row);
+            QImage strip(count * PetAtlas::CellWidth, PetAtlas::CellHeight,
+                         QImage::Format_ARGB32);
+            strip.fill(AtlasComposer::defaultChromaKey());
+            QPainter painter(&strip);
+            painter.setCompositionMode(QPainter::CompositionMode_Source);
+            for (int column = 0; column < count; ++column) {
+                painter.fillRect(column * PetAtlas::CellWidth + 60, PetAtlas::CellHeight - 100,
+                                 60, 90, QColor(200, 40, 40));
+            }
+            painter.end();
+            inputs.append({spec.row, strip});
+        }
+        const AtlasComposer::Result composed = AtlasComposer::compose(inputs, {});
+        QVERIFY(composed.isInstallable());
+
+        AtlasAssemblerWindow *window = showAndFindAssembler(controller);
+        QVERIFY(window);
+        emit window->installRequested(composed.atlas,
+                                      {QStringLiteral("spud"), QStringLiteral("Spud"), QString()});
+
+        QCOMPARE(fx.notifier.lastWarning, QString());
+        QCOMPARE(fx.notifier.warnings, 0);
+        QCOMPARE(settings.selectedPetId(), QStringLiteral("spud"));
+        // The staging directory was temporary, so the installed copy has to live under
+        // the injected user pets root rather than wherever it was written.
+        QVERIFY(QFile::exists(QDir(QDir(fx.config.path()).filePath(QStringLiteral("userpets")))
+                                  .filePath(QStringLiteral("spud/pet.json"))));
+    }
+
+    // A predictable failure still has to be reported rather than swallowed: the writer
+    // refuses an id the validator would reject, and the user hears about it.
+    void anInvalidAssembledPetIsReportedAndInstallsNothing()
+    {
+        Fixture fx;
+        QVERIFY(createPet(fx.pets.path(), QStringLiteral("alpha"), QStringLiteral("Alpha")));
+        AppSettings settings(fx.settingsPath());
+        Localization localization(&settings);
+
+        AppController controller(fx.deps(&settings), AppRunMode::RuntimeCheck);
+        QVERIFY(controller.start());
+
+        AtlasAssemblerWindow *window = showAndFindAssembler(controller);
+        QVERIFY(window);
+        QImage atlas(PetAtlas::Width, PetAtlas::Height, QImage::Format_ARGB32);
+        atlas.fill(Qt::transparent);
+        emit window->installRequested(atlas, {QStringLiteral("Not Valid"),
+                                             QStringLiteral("Nope"), QString()});
+
+        QCOMPARE(settings.selectedPetId(), QStringLiteral("alpha"));
+        QVERIFY(fx.notifier.warnings > 0);
     }
 };
 

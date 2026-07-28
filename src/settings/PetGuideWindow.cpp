@@ -175,6 +175,9 @@ PetGuideWindow::PetGuideWindow(Localization *localization, QWidget *parent)
     addSnippet(column, TextKey::PetGuideRowPromptLabel, kRowPrompt);
 
     addSection(column, TextKey::PetGuideStep3Heading, TextKey::PetGuideStep3Body);
+    m_assemblerButton = addActionButton(column, TextKey::AssemblerButton);
+    connect(m_assemblerButton, &QPushButton::clicked, this,
+            &PetGuideWindow::atlasAssemblerRequested);
 
     addSection(column, TextKey::PetGuideStep4Heading, TextKey::PetGuideStep4Body);
     addSnippet(column, TextKey::PetGuideManifestLabel, kManifest);
@@ -243,6 +246,22 @@ void PetGuideWindow::addSection(QVBoxLayout *column, TextKey headingKey, TextKey
     m_sections.append({heading, body, headingKey, bodyKey});
 }
 
+QPushButton *PetGuideWindow::addActionButton(QVBoxLayout *column, TextKey labelKey)
+{
+    QWidget *parent = column->parentWidget();
+    auto *strip = new QWidget(parent);
+    auto *layout = new QHBoxLayout(strip);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto *button = new QPushButton(strip);
+    button->setObjectName(QStringLiteral("petGuideAssemblerButton"));
+    button->setText(m_localization ? m_localization->text(labelKey) : QString());
+    layout->addWidget(button);
+    layout->addStretch(1);
+    column->addSpacing(4);
+    column->addWidget(strip);
+    return button;
+}
+
 void PetGuideWindow::addSnippet(QVBoxLayout *column, TextKey labelKey, const QString &content)
 {
     QWidget *parent = column->parentWidget();
@@ -252,6 +271,9 @@ void PetGuideWindow::addSnippet(QVBoxLayout *column, TextKey labelKey, const QSt
     captionLayout->setContentsMargins(0, 0, 0, 0);
     auto *label = makeProseLabel(captionRow);
     auto *copyButton = new QPushButton(captionRow);
+    // Named so a test can find the Copy buttons without resorting to "the ones with
+    // no objectName", which quietly picked up the next unnamed button that was added.
+    copyButton->setObjectName(QStringLiteral("petGuideCopyButton"));
     captionLayout->addWidget(label, 1);
     captionLayout->addWidget(copyButton);
     column->addSpacing(2);
@@ -340,6 +362,8 @@ void PetGuideWindow::retranslate()
             QStringLiteral("%1 — %2").arg(m_localization->text(TextKey::PetGuideCopy), caption));
         snippet.box->setAccessibleName(caption);
     }
+    m_assemblerButton->setText(m_localization->text(TextKey::AssemblerButton));
+    m_assemblerButton->setAccessibleName(m_localization->text(TextKey::AssemblerButton));
     m_openDocButton->setText(m_localization->text(TextKey::PetGuideOpenDoc));
     m_revealSkillButton->setText(m_localization->text(TextKey::PetGuideRevealSkill));
     m_closeButton->setText(m_localization->text(TextKey::Close));

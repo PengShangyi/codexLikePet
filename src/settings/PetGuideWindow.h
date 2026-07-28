@@ -32,6 +32,11 @@ class PetGuideWindow final : public QWidget
 public:
     explicit PetGuideWindow(Localization *localization, QWidget *parent = nullptr);
 
+signals:
+    // Opens the assembler. Sits inside step 3, which is the step it does the work
+    // of: the copy there used to hand assembly to the bundled skill outright.
+    void atlasAssemblerRequested();
+
 protected:
     void showEvent(QShowEvent *event) override;
 
@@ -55,6 +60,9 @@ private:
     // sessions never open should not build a stylesheet at construction.
     void applyTheme();
     void addSection(QVBoxLayout *column, TextKey headingKey, TextKey bodyKey);
+    // A left-aligned button in the scrolling column. Needs the wrapper: a bare button
+    // added to a QVBoxLayout stretches to the full column width.
+    QPushButton *addActionButton(QVBoxLayout *column, TextKey labelKey);
     void addSnippet(QVBoxLayout *column, TextKey labelKey, const QString &content);
     // Opens a path under the app bundle's Contents/Resources, or does nothing if
     // it is absent — the buttons are disabled in that case anyway.
@@ -68,6 +76,7 @@ private:
     QLabel *m_placeholderNote = nullptr;
     QVector<Section> m_sections;
     QVector<Snippet> m_snippets;
+    QPushButton *m_assemblerButton = nullptr;
     QPushButton *m_openDocButton = nullptr;
     QPushButton *m_revealSkillButton = nullptr;
     QPushButton *m_closeButton = nullptr;

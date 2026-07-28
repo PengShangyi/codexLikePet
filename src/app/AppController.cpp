@@ -9,6 +9,7 @@
 #include "ui/Theme.h"
 #include "settings/OnboardingWindow.h"
 #include "settings/AboutWindow.h"
+#include "settings/AtlasAssemblerWindow.h"
 #include "settings/PetGuideWindow.h"
 #include "pet/AnimationPlayer.h"
 #include "pet/AnimationClip.h"
@@ -36,6 +37,7 @@
 #include <QIcon>
 #include <QDir>
 #include <QFileDialog>
+#include <QTemporaryDir>
 #include <QMenu>
 #include <QPainter>
 #include <QPixmap>
@@ -80,7 +82,13 @@ AppController::AppController(Dependencies deps, AppRunMode mode, QObject *parent
     , m_localization(new Localization(m_settings, this))
     , m_petWindow(std::make_unique<PetWindow>(m_settings))
     , m_petLibrary(new PetLibrary(deps.builtInPetRoot, deps.userPetRoot, this))
-    , m_importer(std::make_unique<PetPackageImporter>(PetStore()))
+    // Rooted where PetLibrary looks, not at PetStore's own default. Those are the
+    // same directory in production -- both resolve to defaultPetsRoot() when the
+    // dependency is unset -- but a default-constructed store ignored an injected
+    // userPetRoot, so an install landed in the real Application Support directory
+    // while the library scanned the injected one. That made the whole import path
+    // untestable, and a test that tried would have written to the user's own pets.
+    , m_importer(std::make_unique<PetPackageImporter>(PetStore(deps.userPetRoot)))
     , m_atlasCache(std::make_unique<AtlasCache>(2))
     // One environment's clip set is click + typing + three edges; 8 leaves room
     // for a preview alongside them without growing without bound.
@@ -276,8 +284,20 @@ AboutWindow *AppController::aboutWindow()
 
 PetGuideWindow *AppController::petGuideWindow()
 {
-    if (!m_petGuideWindow) m_petGuideWindow = std::make_unique<PetGuideWindow>(m_localization);
+    if (m_petGuideWindow) return m_petGuideWindow.get();
+    m_petGuideWindow = std::make_unique<PetGuideWindow>(m_localization);
+    connect(m_petGuideWindow.get(), &PetGuideWindow::atlasAssemblerRequested, this,
+            &AppController::showAtlasAssembler);
     return m_petGuideWindow.get();
+}
+
+AtlasAssemblerWindow *AppController::atlasAssemblerWindow()
+{
+    if (m_atlasAssemblerWindow) return m_atlasAssemblerWindow.get();
+    m_atlasAssemblerWindow = std::make_unique<AtlasAssemblerWindow>(m_localization);
+    connect(m_atlasAssemblerWindow.get(), &AtlasAssemblerWindow::installRequested, this,
+            &AppController::installAssembledPet);
+    return m_atlasAssemblerWindow.get();
 }
 
 AppController::~AppController()
@@ -819,9 +839,52 @@ void AppController::importPet(bool directory)
         m_notifier->warn(m_localization->text(TextKey::ImportFailed), result.error);
         return;
     }
+    adoptImportedPet(result);
+}
+
+void AppController::adoptImportedPet(const PetImportResult &result)
+{
     m_settings->setSelectedPetId(result.validation.package.id);
     refreshPetLibrary();
     m_settingsView.setValidationReport(m_localization->text(TextKey::ImportSucceeded), false);
+}
+
+void AppController::installAssembledPet(const QImage &atlas, const PetPackageWriter::PetInfo &info)
+{
+    // A stack-local temporary directory, not a folder the user chose. Writing beside
+    // their eleven strips would make every one of them an unreferenced file the
+    // validator rejects, and any folder Finder has opened may carry a .DS_Store, which
+    // has no suffix and trips the file-type rule instead. PetStore::install copies the
+    // tree before this returns and refuses to stage inside its own source, so the
+    // directory can go away the moment the import is done.
+    QTemporaryDir staging;
+    const auto fail = [this](const QString &reason) {
+        atlasAssemblerWindow()->setInstallReport(reason, true);
+        m_notifier->warn(m_localization->text(TextKey::ImportFailed), reason);
+    };
+
+    if (!staging.isValid()) {
+        fail(QStringLiteral("Unable to create temporary storage for the assembled pet"));
+        return;
+    }
+    QString error;
+    if (!PetPackageWriter::write(staging.path(), atlas, info,
+                                 PetPackageWriter::preferredFormat(), &error)) {
+        fail(error);
+        return;
+    }
+
+    // The same importer the Import Pet buttons use, so the assembled package goes
+    // through exactly the validation an imported one does -- Full depth, then the
+    // store's post-copy recheck.
+    const PetImportResult result = m_importer->importPath(staging.path());
+    if (!result.success) {
+        m_settingsView.setValidationReport(result.error, true);
+        fail(result.error);
+        return;
+    }
+    adoptImportedPet(result);
+    atlasAssemblerWindow()->setInstallReport(m_localization->text(TextKey::ImportSucceeded), false);
 }
 
 void AppController::removeSelectedPet()
@@ -872,6 +935,14 @@ void AppController::showPetGuide()
     petGuideWindow()->show();
     petGuideWindow()->raise();
     petGuideWindow()->activateWindow();
+}
+
+void AppController::showAtlasAssembler()
+{
+    if (!m_suppressSystemMutations) MacApplication::activateIgnoringOtherApps();
+    atlasAssemblerWindow()->show();
+    atlasAssemblerWindow()->raise();
+    atlasAssemblerWindow()->activateWindow();
 }
 
 void AppController::presentStartupFailure()

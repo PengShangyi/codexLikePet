@@ -119,6 +119,14 @@ never parented to the controller; only the defaults it created are its to own. A
 new boundary to that struct rather than reaching for the platform directly, or the
 composition test loses the seam.
 
+A field is only injected if **every** consumer of it takes it. `userPetRoot` reached
+`PetLibrary` but not the `PetStore` inside `PetPackageImporter`, which was
+default-constructed and so resolved its own `defaultPetsRoot()`. Both are the same
+directory in production, which is why nothing looked wrong — but under injection the
+library scanned the temporary root while an install landed in the user's real
+Application Support directory. That made the entire import path untestable, and the
+first test to try it would have written to the user's own pets.
+
 `main.cpp` is deliberately thin: it sets the org/app names, takes the `SingleInstance`
 lock (a `QLocalServer` named per uid), and constructs the controller. A second launch
 is not an error — it sends `show-settings` to the primary and exits 0, which is the
@@ -285,6 +293,62 @@ follow, both load-bearing:
   which is the only place the resource summary appears, and as nothing at all
   against the page. The snippets sit directly on the page, so they take the
   on-page surface colour like every other card.
+
+Step 3 of the guide opens **`AtlasAssemblerWindow`** (`src/settings/`), which is
+what makes the assembly step something the app does rather than something it
+delegates. It is the view over two pure modules:
+
+- **`AtlasComposer`** (`src/pet/`, in `potato_atlas`) — eleven strips in, one
+  1536x2288 v2 atlas out: slice, chroma-key, despill, fit, place, self-verify.
+  Pure namespace, no filesystem or platform, and its issues carry **codes, not
+  sentences** — `potato_atlas` links Core and Gui only, so reaching for
+  `Localization` would dissolve the layering. The window maps codes to `TextKey`s.
+- **`PetPackageWriter`** (`src/resources/`, in `potato_package`) — the write-side
+  twin of `PetPackageValidator`, in the same library so the manifest key spellings
+  sit beside the code that reads them.
+
+Four things there are load-bearing and easy to undo by accident.
+
+*Keying compares BT.601 chrominance, not Euclidean RGB.* RGB distance is dominated
+by luminance, so a shadowed patch of an unevenly lit chroma card measures *further*
+from the key than a bright one and survives as a fringe: at tolerance 96, `#003614`
+is ~130 away in RGB and kept, ~84 in chroma and removed.
+
+*Rows are normalized to the cell before one common scale is chosen.* Each row comes
+from a separate model call and so arrives at its own resolution; fitting on raw
+pixel sizes carries that through as a size difference and the pet changes size
+between animations. A genuine size difference within one resolution still survives.
+
+*Placement is asymmetric.* Horizontal uses each frame's own centre (kills drift, so
+the pet cannot slide inside its window); vertical uses the row's shared ground line
+(preserves the arc, so a jump leaves the floor). Per-frame vertical centring — what
+the skill's `fit_to_cell` does — makes a jump bob in place.
+
+*Everything stays straight `ARGB32` and transparent pixels are zeroed whole.*
+`ARGB32` swizzles losslessly into what Qt's WebP encoder wants, premultiplied does
+not; and libwebp rewrites RGB inside transparent blocks unless `WebPConfig.exact`
+is set, which Qt never sets. Composition is a scanline copy rather than `QPainter`,
+which also keeps the source strips' colour space out of the atlas — a tagged atlas
+renders differently from the untagged built-in sprites (commit `3771e14`).
+
+The window emits `installRequested` and `AppController::installAssembledPet` writes
+into a stack `QTemporaryDir` and hands it to the existing `PetPackageImporter`, so
+validation and install stay on **one** path. Never write a package into a folder the
+user chose: their eleven strips would all become unreferenced files
+(`package.unknownFile`), and any folder Finder has opened may carry a `.DS_Store`,
+which has no suffix and trips `package.fileType` instead.
+
+`compose()` returns the atlas it *could* build even when something blocking is
+reported, because a blank preview is useless in exactly the case the preview exists
+for — the user cannot see which of their eleven strips landed. It skips the
+occupancy self-check then, since a partial atlas fails it by definition.
+
+`AtlasGridPreview` must never be matched by a QSS rule, for the same
+`WA_StyledBackground` reason as `PetPreviewWidget`; `test_theme.cpp` asserts both.
+The assembler drops its decoded strips and composed atlas in `hideEvent` and keeps
+only paths — it is built on first use and never destroyed, so eleven strips plus
+14 MB would otherwise stay resident for the session, and `check-runtime.sh` opens no
+windows and would not catch it.
 
 Their frozen height is measured, so the inner margin goes on the text document
 (`Metrics::codeBoxMargin` via `setDocumentMargin`) rather than into a QSS

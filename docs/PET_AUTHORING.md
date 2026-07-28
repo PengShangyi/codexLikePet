@@ -4,6 +4,25 @@ Potato accepts an ordinary Codex v2 pet and adds optional, separate resources
 for seasons, day/night appearances, click/typing overrides, and edge poses.
 The original `pet.json` and `spritesheet.webp` remain Codex-compatible.
 
+## Assemble in the app
+
+Settings › Pet › "Make a pet…" opens the in-app guide, and step 3 of it opens the
+atlas assembler. Give it the eleven row strips an image model returned — `idle`,
+`running-right`, `running-left`, `waving`, `jumping`, `failed`, `waiting`,
+`running`, `review`, `look-a`, `look-b` — and it slices out every frame, keys out
+the chroma background, gives them one common scale and one ground baseline,
+composes the 1536×2288 atlas, and installs it through the ordinary import path.
+No Python, Codex, or terminal.
+
+It defaults to the chroma key `#00B140`, which is what the guide's own prompt
+templates ask the model for, and can read the key out of a strip's corner
+instead. Name each file after its row and "Fill from folder…" matches all eleven
+at once.
+
+Use the skill below instead when you want to drive each stage yourself, or need
+what the assembler deliberately leaves out: seasonal variants, edge clips, and
+the skill's blind-QA gates for direction continuity.
+
 ## Use the bundled Hatch Pet skill
 
 The unmodified skill is available at `third_party/hatch-pet` in the repository

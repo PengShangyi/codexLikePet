@@ -14,6 +14,8 @@
 #include "pet/BehaviorController.h"
 #include "pet/IdleActivityScheduler.h"
 #include "resources/PetPackage.h"
+#include "resources/PetPackageImporter.h"
+#include "resources/PetPackageWriter.h"
 
 class QAction;
 class QMenu;
@@ -26,6 +28,7 @@ class SettingsWindow;
 class OnboardingWindow;
 class AboutWindow;
 class PetGuideWindow;
+class AtlasAssemblerWindow;
 class PetLibrary;
 class PetPackageImporter;
 class AtlasCache;
@@ -86,6 +89,7 @@ public:
     void showAbout();
     void showWelcome();
     void showPetGuide();
+    void showAtlasAssembler();
     void presentStartupFailure();
     // Puts the pet away or brings it back, as the tray item does. Public because it
     // is a command like requestSettings(), and because hiding is the one quiet reason
@@ -132,6 +136,12 @@ private:
     OnboardingWindow *onboardingWindow();
     AboutWindow *aboutWindow();
     PetGuideWindow *petGuideWindow();
+    AtlasAssemblerWindow *atlasAssemblerWindow();
+    // Writes the composed atlas into a temporary directory and hands it to the same
+    // importer the Import Pet buttons use, so validation and install stay on one path.
+    void installAssembledPet(const QImage &atlas, const PetPackageWriter::PetInfo &info);
+    // The tail importPet() and installAssembledPet() share: select, then refresh.
+    void adoptImportedPet(const PetImportResult &result);
     void loadPreviewClip(const QString &key);
     QSharedPointer<AnimationClip> loadClip(const QString &name);
     bool playClip(const QString &name, bool restart = true);
@@ -178,14 +188,15 @@ private:
     QAction *m_quitAction;
     AppSettings *m_settings;
     Localization *m_localization;
-    // All four are built on first use, not at startup: between them they are
-    // five settings pages, a preview widget and three more windows, and most
+    // All five are built on first use, not at startup: between them they are
+    // five settings pages, a preview widget and four more windows, and most
     // sessions never open any of them. m_settingsView absorbs the state pushed
     // at the settings window in the meantime.
     std::unique_ptr<SettingsWindow> m_settingsWindow;
     std::unique_ptr<OnboardingWindow> m_onboardingWindow;
     std::unique_ptr<AboutWindow> m_aboutWindow;
     std::unique_ptr<PetGuideWindow> m_petGuideWindow;
+    std::unique_ptr<AtlasAssemblerWindow> m_atlasAssemblerWindow;
     SettingsViewState m_settingsView;
     std::unique_ptr<PetWindow> m_petWindow;
     PetLibrary *m_petLibrary;

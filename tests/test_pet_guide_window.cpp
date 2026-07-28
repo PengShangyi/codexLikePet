@@ -1,3 +1,4 @@
+#include "pet/AtlasComposer.h"
 #include "settings/AppSettings.h"
 #include "settings/Localization.h"
 #include "settings/PetGuideWindow.h"
@@ -9,6 +10,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextCursor>
@@ -142,8 +144,7 @@ private slots:
         QCOMPARE(boxes.size(), 3);
         // Each Copy button shares a caption row with its label and sits beside the
         // box in the column, so pair them by order.
-        auto buttons = window.findChildren<QPushButton *>();
-        buttons.removeIf([](const QPushButton *button) { return !button->objectName().isEmpty(); });
+        const auto buttons = window.findChildren<QPushButton *>(QStringLiteral("petGuideCopyButton"));
         QCOMPARE(buttons.size(), 3);
 
         for (int i = 0; i < 3; ++i) {
@@ -153,6 +154,62 @@ private slots:
             // The button reports back, and says so in the current language.
             QCOMPARE(buttons.at(i)->text(), localization.text(TextKey::PetGuideCopied));
         }
+    }
+
+    // The assembler button belongs in step 3, which is the step it does the work of.
+    // Placed anywhere else it reads as an alternative to the guide rather than as the
+    // next thing to do after the two prompts above it.
+    void theAssemblerButtonSitsInStepThreeAndAsksForTheAssembler()
+    {
+        QTemporaryDir temp;
+        AppSettings settings(temp.filePath(QStringLiteral("settings.ini")));
+        settings.setLanguage(AppLanguage::English);
+        Localization localization(&settings);
+        PetGuideWindow window(&localization);
+
+        auto *assembler = window.findChild<QPushButton *>(
+            QStringLiteral("petGuideAssemblerButton"));
+        QVERIFY(assembler);
+        QCOMPARE(assembler->text(), localization.text(TextKey::AssemblerButton));
+        QVERIFY(!assembler->accessibleName().isEmpty());
+
+        // Between the step 3 body and the step 4 heading, in the scrolling column
+        // rather than the action strip at the bottom.
+        const auto labels = window.findChildren<QLabel *>();
+        int step3 = -1;
+        int step4 = -1;
+        for (int i = 0; i < labels.size(); ++i) {
+            if (labels.at(i)->text() == localization.text(TextKey::PetGuideStep3Body)) step3 = i;
+            if (labels.at(i)->text() == localization.text(TextKey::PetGuideStep4Heading)) step4 = i;
+        }
+        QVERIFY(step3 >= 0 && step4 > step3);
+        QVERIFY(assembler->parentWidget() != window.findChild<QPushButton *>(
+                                                 QStringLiteral("petGuideCloseButton"))
+                                                 ->parentWidget());
+
+        QSignalSpy spy(&window, &PetGuideWindow::atlasAssemblerRequested);
+        assembler->click();
+        QCOMPARE(spy.count(), 1);
+    }
+
+    // Cheap cross-check that the prompt the user pastes and the key the assembler
+    // defaults to cannot drift apart. The prompt is a literal with fixed line lengths,
+    // so it deliberately is not templated -- which is exactly why this needs asserting.
+    void thePromptTemplatesNameTheAssemblersDefaultChromaKey()
+    {
+        QTemporaryDir temp;
+        AppSettings settings(temp.filePath(QStringLiteral("settings.ini")));
+        Localization localization(&settings);
+        PetGuideWindow window(&localization);
+
+        const QString key = AtlasComposer::defaultChromaKey().name(QColor::HexRgb).toUpper();
+        QCOMPARE(key, QStringLiteral("#00B140"));
+        int mentions = 0;
+        for (const QPlainTextEdit *box : window.findChildren<QPlainTextEdit *>()) {
+            if (box->toPlainText().contains(key)) ++mentions;
+        }
+        QVERIFY2(mentions >= 2,
+                 qPrintable(QStringLiteral("only %1 prompt(s) name %2").arg(mentions).arg(key)));
     }
 
     // The window owns its own ThemeWatcher because it is not in the settings
